@@ -1,0 +1,19 @@
+.env
+.env.*
+!.env.example
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.g.dart
+*.freezed.dart
+
+# Additional Secret Data
+*.pem
+*.key
+certs/
+secrets/

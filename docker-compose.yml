@@ -1,0 +1,155 @@
+services:
+  # ─── DATABASE LAYER ─────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: alzai-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-alzai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-alzai_secure_password}
+      POSTGRES_DB: ${POSTGRES_DB:-alzai}
+    command: ["postgres", "-c", "password_encryption=md5"]
+    volumes:
+      - postgres_data_v16:/var/lib/postgresql/data
+    networks:
+      - alzai-net
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alzai -d alzai"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: alzai-pgbouncer
+    environment:
+      DATABASE_URL: "postgres://${POSTGRES_USER:-alzai}:${POSTGRES_PASSWORD:-alzai_secure_password}@db:5432/${POSTGRES_DB:-alzai}"
+      PGBOUNCER_LISTEN_PORT: 6432
+      LISTEN_PORT: 6432
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 100
+      DEFAULT_POOL_SIZE: 20
+      AUTH_TYPE: trust
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - alzai-net
+    healthcheck:
+      # Use a simple TCP check to verify pgbouncer is listening
+      test: ["CMD-SHELL", "netstat -an | grep 6432 > /dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: alzai-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - alzai-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: alzai-neo4j
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-alzai_secure_password}
+      NEO4J_server_memory_pagecache_size: 256M
+      NEO4J_server_memory_heap_initial__size: 256M
+      NEO4J_server_memory_heap_max__size: 512M
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    networks:
+      - alzai-net
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── STORAGE LAYER ──────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: alzai-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio_admin_secure}
+    volumes:
+      - minio_data:/data
+    networks:
+      - alzai-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── APPLICATION LAYER ──────────────────────────────────────
+  backend:
+    build: ./backend
+    container_name: alzai-backend
+    env_file: .env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - alzai-net
+
+  frontend:
+    build: ./frontend
+    container_name: alzai-frontend
+    env_file: .env
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - alzai-net
+
+  # ─── EDGE PROXY ─────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: alzai-nginx
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+      - "8080:80"
+      - "8888:80"
+      - "443:443"
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - alzai-net
+
+networks:
+  alzai-net:
+    driver: bridge
+
+volumes:
+  postgres_data_v16:
+  redis_data:
+  neo4j_data:
+  neo4j_logs:
+  minio_data:
