@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
 import usePatient from '../../hooks/usePatient';
@@ -10,8 +10,9 @@ import HeartRateChart from '../../components/doctor/HeartRateChart';
 import SleepChart from '../../components/doctor/SleepChart';
 import ComplianceGrid from '../../components/caretaker/ComplianceGrid';
 import AlertFeed from '../../components/caretaker/AlertFeed';
-import { ArrowLeft, Activity, Heart, Moon, Pill, BrainCircuit, FileImage, Video } from 'lucide-react';
+import { ArrowLeft, Activity, Heart, Moon, Pill, BrainCircuit, FileImage, Video, Plus, Trash2, Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import api from '../../services/api';
 
 const PatientDetail = () => {
   const { id } = useParams();
@@ -19,6 +20,40 @@ const PatientDetail = () => {
   const [activeTab, setActiveTab] = useState('overview');
   
   const { patient, loading, error, analytics, refetch } = usePatient(id);
+  const [medications, setMedications] = useState([]);
+  const [showMedForm, setShowMedForm] = useState(false);
+  const [medSaving, setMedSaving] = useState(false);
+  const [medForm, setMedForm] = useState({ name: '', dosage: '', scheduled_times: '' });
+
+  useEffect(() => {
+    if (id) fetchMedications();
+  }, [id]);
+
+  const fetchMedications = async () => {
+    try {
+      const res = await api.get(`/medications/${id}`);
+      setMedications(res.data || []);
+    } catch (e) { console.error(e); }
+  };
+
+  const handleAddMed = async (e) => {
+    e.preventDefault();
+    setMedSaving(true);
+    try {
+      const times = medForm.scheduled_times.split(',').map(t => t.trim()).filter(Boolean);
+      await api.post('/medications/', { patient_id: id, name: medForm.name, dosage: medForm.dosage, scheduled_times: times });
+      setMedForm({ name: '', dosage: '', scheduled_times: '' });
+      setShowMedForm(false);
+      fetchMedications();
+    } catch (e) { console.error(e); } finally { setMedSaving(false); }
+  };
+
+  const handleDeleteMed = async (medId) => {
+    try {
+      await api.delete(`/medications/${medId}`);
+      fetchMedications();
+    } catch (e) { console.error(e); }
+  };
 
   if (loading) {
     return (
@@ -109,7 +144,13 @@ const PatientDetail = () => {
           
           <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 w-full md:w-auto md:min-w-[200px]">
              <div className="text-sm text-gray-500 font-medium mb-1">Caretaker</div>
-             <div className="font-bold text-gray-900">{patient.caretaker_name || 'Unassigned'}</div>
+             {patient.caretaker_info && patient.caretaker_info.length > 0 ? (
+               patient.caretaker_info.map((ct, i) => (
+                 <div key={i} className="font-bold text-gray-900">{ct.full_name}</div>
+               ))
+             ) : (
+               <div className="font-bold text-gray-900">Unassigned</div>
+             )}
              <div className="text-sm text-blue-600 font-medium mt-1">
                 Last check-in: {patient.last_checkin ? formatDistanceToNow(new Date(patient.last_checkin), { addSuffix: true }) : 'Never'}
              </div>
@@ -171,17 +212,70 @@ const PatientDetail = () => {
           </div>
         ) : (
           <div className="space-y-6">
-            
+            {/* Prescriptions Section */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <Pill className="w-5 h-5 text-blue-500" /> Prescriptions ({medications.length})
+                </h3>
+                <button
+                  onClick={() => setShowMedForm(!showMedForm)}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm"
+                >
+                  <Plus className="w-4 h-4" /> Add Medication
+                </button>
+              </div>
+
+              {showMedForm && (
+                <form onSubmit={handleAddMed} className="mb-5 bg-blue-50 border border-blue-100 rounded-xl p-5 space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <input required value={medForm.name} onChange={e => setMedForm({...medForm, name: e.target.value})}
+                      placeholder="Medication name" className="px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                    <input required value={medForm.dosage} onChange={e => setMedForm({...medForm, dosage: e.target.value})}
+                      placeholder="Dosage (10mg)" className="px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                    <input required value={medForm.scheduled_times} onChange={e => setMedForm({...medForm, scheduled_times: e.target.value})}
+                      placeholder="Times: 08:00, 20:00" className="px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <button type="button" onClick={() => setShowMedForm(false)} className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+                    <button type="submit" disabled={medSaving} className="px-5 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg flex items-center gap-2">
+                      {medSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Prescribe
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {medications.length === 0 ? (
+                <div className="text-center py-8 text-gray-400 border-2 border-dashed border-gray-50 rounded-xl">
+                  <Pill className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                  <p className="font-medium">No active medications.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {medications.map(m => (
+                    <div key={m.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
+                      <div>
+                        <p className="font-bold text-gray-900">{m.name}</p>
+                        <p className="text-blue-600 text-xs font-semibold">{m.dosage}</p>
+                        <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-tight font-bold">⏰ {Array.isArray(m.scheduled_times) ? m.scheduled_times.join(', ') : m.scheduled_times}</p>
+                      </div>
+                      <button onClick={() => handleDeleteMed(m.id)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Restored Vitals Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-               {/* Heart Rate */}
                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                    <Heart className="w-5 h-5 text-red-500" /> Heart Rate (7 Days)
                  </h3>
                  <HeartRateChart data={analytics?.vitals || []} isLoading={loading} />
                </div>
-
-               {/* Sleep */}
                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                    <Moon className="w-5 h-5 text-indigo-500" /> Sleep (7 Days)
@@ -191,15 +285,12 @@ const PatientDetail = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-               {/* Steps */}
                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                    <Activity className="w-5 h-5 text-green-500" /> Steps (7 Days)
                  </h3>
                  <StepChart data={analytics?.steps || []} isLoading={loading} />
                </div>
-
-               {/* Med Compliance */}
                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                    <Pill className="w-5 h-5 text-blue-500" /> Medication Compliance
@@ -209,7 +300,6 @@ const PatientDetail = () => {
                  </div>
                </div>
             </div>
-
           </div>
         )}
 

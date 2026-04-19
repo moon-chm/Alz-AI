@@ -7,21 +7,57 @@ import { showSuccess, showError } from '../../components/shared/Toast';
 const Reports = () => {
   const [generating, setGenerating] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState(30);
-  const [reportUrl, setReportUrl] = useState(null);
+  const [downloadBlobUrl, setDownloadBlobUrl] = useState(null);
+  const [downloadFilename, setDownloadFilename] = useState('');
 
   const handleGenerate = async () => {
     setGenerating(true);
-    setReportUrl(null);
+    setDownloadBlobUrl(null);
     try {
-      const data = await caretakerService.generateReport(selectedPeriod);
-      setReportUrl(data.url);
-      showSuccess('Report generated successfully!');
+      const filename = `AlzAI_Patient_Report_${selectedPeriod}days_${new Date().toISOString().slice(0,10)}.pdf`;
+      const response = await fetch(`/api/caretaker/reports/pdf`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        },
+        body: JSON.stringify({ period_days: selectedPeriod })
+      });
+
+      if (!response.ok) throw new Error(`Server error: ${response.status}`);
+
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      
+      // Trigger immediate download
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Keep blob URL in state for re-download
+      setDownloadBlobUrl(blobUrl);
+      setDownloadFilename(filename);
+      showSuccess('PDF downloaded to your computer!');
     } catch (err) {
-      showError('Failed to generate report');
+      showError('Failed to generate report. Please try again.');
       console.error(err);
     } finally {
       setGenerating(false);
     }
+  };
+
+  const handleReDownload = () => {
+    if (!downloadBlobUrl) return;
+    const link = document.createElement('a');
+    link.href = downloadBlobUrl;
+    link.download = downloadFilename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showSuccess('Downloading again!');
   };
 
   return (
@@ -94,25 +130,15 @@ const Reports = () => {
         </div>
 
         {/* Result Card */}
-        {reportUrl && (
-          <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-6 animate-in zoom-in-95 duration-500">
-             <div className="flex items-center gap-4">
-                <div className="bg-green-100 text-green-600 p-3 rounded-full">
-                   <Download className="w-6 h-6" />
-                </div>
-                <div>
-                   <h3 className="text-lg font-bold text-green-900">Report Ready for Download</h3>
-                   <p className="text-sm text-green-700 font-medium">Analysis completed. You can now download the PDF summary.</p>
-                </div>
+        {downloadBlobUrl && (
+          <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-6 flex items-center gap-4">
+             <div className="bg-green-100 text-green-600 p-3 rounded-full">
+                <Download className="w-6 h-6" />
              </div>
-             <a 
-               href={reportUrl} 
-               target="_blank" 
-               rel="noopener noreferrer"
-               className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-xl font-bold shadow-md transition-colors"
-             >
-                Download PDF
-             </a>
+             <div>
+                <h3 className="text-lg font-bold text-green-900">✅ Report Downloaded!</h3>
+                <p className="text-sm text-green-700 font-medium">Saved as <span className="font-mono text-xs bg-green-100 px-1 rounded">{downloadFilename}</span></p>
+             </div>
           </div>
         )}
 
