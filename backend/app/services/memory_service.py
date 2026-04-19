@@ -109,7 +109,7 @@ def get_upcoming_visits(patient_id: str) -> list:
 def save_conversation_log(patient_id: str, summary: str, mood_detected: str, initiated_by: str):
     with get_neo4j_session() as session:
         session.run(
-            "MATCH (p:Patient {id: $id}) "
+            "MERGE (p:Patient {id: $id}) "
             "CREATE (p)-[:HAD_CONVERSATION]->(c:ConversationLog {"
             "  timestamp: $timestamp, summary: $summary, "
             "  mood_detected: $mood, initiated_by: $initiated_by"
@@ -124,7 +124,7 @@ def save_conversation_log(patient_id: str, summary: str, mood_detected: str, ini
 def save_mood_log(patient_id: str, mood: str, summary: str, detected_by: str):
     with get_neo4j_session() as session:
         session.run(
-            "MATCH (p:Patient {id: $id}) "
+            "MERGE (p:Patient {id: $id}) "
             "CREATE (p)-[:HAS_MOOD]->(m:MoodLog {"
             "  mood: $mood, summary: $summary, "
             "  detected_by: $detected_by, timestamp: $timestamp"
@@ -139,7 +139,7 @@ def save_mood_log(patient_id: str, mood: str, summary: str, detected_by: str):
 def create_memory_node(patient_id: str, content: str, category: str, added_by: str) -> dict:
     with get_neo4j_session() as session:
         result = session.run(
-            "MATCH (p:Patient {id: $id}) "
+            "MERGE (p:Patient {id: $id}) "
             "CREATE (p)-[:HAS_MEMORY]->(m:Memory {"
             "  id: randomUUID(), content: $content, category: $category, "
             "  date_added: $date, added_by: $added_by"
@@ -173,7 +173,7 @@ def delete_memory_node(memory_id: str):
 def create_family_member(patient_id: str, name: str, relationship: str, phone: str) -> dict:
     with get_neo4j_session() as session:
         result = session.run(
-            "MATCH (p:Patient {id: $id}) "
+            "MERGE (p:Patient {id: $id}) "
             "CREATE (p)-[:HAS_FAMILY]->(f:FamilyMember {"
             "  id: randomUUID(), name: $name, relationship: $relationship, phone: $phone"
             "}) RETURN f",

@@ -25,8 +25,8 @@ const createAppointment = async (apptData, signal) => {
   return response.data;
 };
 
-const setGeofence = async (polygon, signal) => {
-  const response = await api.post('/caretaker/geofence/set', { coordinates: polygon }, { signal });
+const setGeofence = async (patientId, geofenceData, signal) => {
+  const response = await api.post(`/caretaker/geofence/set?patient_id=${patientId}`, geofenceData, { signal });
   return response.data;
 };
 
@@ -65,7 +65,7 @@ const sendPhoto = async (file, caption, patientId = null, signal) => {
   const url = patientId ? `/caretaker/photo/send?patient_id=${patientId}` : '/caretaker/photo/send';
   const response = await api.post(url, formData, {
     headers: {
-      'Content-Type': 'multipart/form-data',
+      'Content-Type': undefined,
     },
     signal
   });
@@ -74,6 +74,11 @@ const sendPhoto = async (file, caption, patientId = null, signal) => {
 
 const getPhotos = async (signal) => {
   const response = await api.get('/caretaker/photos', { signal });
+  return response.data;
+};
+
+const deletePhoto = async (id, signal) => {
+  const response = await api.delete(`/caretaker/photo/${id}`, { signal });
   return response.data;
 };
 
@@ -114,6 +119,17 @@ const linkPatient = async (patientUniqueId, signal) => {
   return response.data;
 };
 
+const getDailySchedule = async (patientId, signal) => {
+  const response = await api.get(`/medications/${patientId}/daily-schedule`, { signal });
+  return response.data;
+};
+
+const getUpcomingAppointments = async (signal) => {
+  // Use the consolidated appointments endpoint which handles role filtering on backend
+  const response = await api.get('/appointments/upcoming', { signal });
+  return response.data;
+};
+
 export default {
   getDashboard,
   getPatientStatus,
@@ -129,10 +145,13 @@ export default {
   deleteMedication,
   sendPhoto,
   getPhotos,
+  deletePhoto,
   addMemory,
   getMemories,
   updateMemory,
   deleteMemory,
   generateReport,
   linkPatient,
+  getDailySchedule,
+  getUpcomingAppointments,
 };

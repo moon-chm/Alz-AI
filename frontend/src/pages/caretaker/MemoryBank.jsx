@@ -5,7 +5,7 @@ import MemoryForm from '../../components/caretaker/MemoryForm';
 import memoryService from '../../services/memory.service';
 import { usePatientContext } from '../../context/PatientContext';
 import { showSuccess, showError } from '../../components/shared/Toast';
-import { Search, Plus, Filter, Type } from 'lucide-react';
+import { Search, Plus, Filter, Type, Trash2 } from 'lucide-react';
 
 const MemoryBank = () => {
   const { selectedPatient } = usePatientContext();
@@ -13,6 +13,7 @@ const MemoryBank = () => {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingMemory, setEditingMemory] = useState(null);
+  const [memoryToDelete, setMemoryToDelete] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCat, setFilterCat] = useState('All');
 
@@ -39,7 +40,10 @@ const MemoryBank = () => {
         await memoryService.updateMemory(editingMemory.id, formData);
         showSuccess('Memory updated successfully');
       } else {
-        await memoryService.addMemory(selectedPatient.id, formData);
+        await memoryService.createMemory({
+          ...formData,
+          patient_id: selectedPatient.id
+        });
         showSuccess('Memory added to the bank');
       }
       setShowForm(false);
@@ -50,13 +54,20 @@ const MemoryBank = () => {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = (id) => {
+    setMemoryToDelete(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!memoryToDelete) return;
     try {
-      await memoryService.deleteMemory(id);
+      await memoryService.deleteMemory(memoryToDelete);
       showSuccess('Memory deleted');
       fetchMemories();
     } catch (err) {
       showError('Failed to delete memory');
+    } finally {
+      setMemoryToDelete(null);
     }
   };
 
@@ -162,6 +173,37 @@ const MemoryBank = () => {
         )}
 
       </div>
+
+      {/* Premium Delete Confirmation Modal */}
+      {memoryToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm transition-opacity">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all duration-300 scale-100 translate-y-0">
+            <div className="p-8 text-center border-b border-gray-100">
+              <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-5 shadow-inner">
+                <Trash2 className="w-6 h-6 text-red-500" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Delete Knowledge Base Node</h3>
+              <p className="text-gray-500 text-sm leading-relaxed px-2">
+                Are you sure you want to permanently delete this memory? This will completely sever its connection from the Knowledge Graph.
+              </p>
+            </div>
+            <div className="px-6 py-5 bg-gray-50/80 flex items-center gap-3 justify-center">
+              <button 
+                onClick={() => setMemoryToDelete(null)}
+                className="px-5 py-2.5 text-sm font-semibold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 hover:text-gray-900 transition-colors flex-1"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={confirmDelete}
+                className="px-5 py-2.5 text-sm font-semibold text-white bg-red-500 rounded-xl hover:bg-red-600 active:bg-red-700 transition-colors shadow-sm shadow-red-200 flex-1"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 };

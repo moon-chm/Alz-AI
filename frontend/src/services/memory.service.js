@@ -1,7 +1,9 @@
 import api from './api';
 
-const createMemory = async (data) => {
-  const response = await api.post('/caretaker/memory', data);
+const createMemory = async (dataOrId, legacyPayload = null) => {
+  // If a legacy cached client calls addMemory(patientId, formData)
+  let finalData = legacyPayload ? { ...legacyPayload, patient_id: dataOrId } : dataOrId;
+  const response = await api.post('/caretaker/memory', finalData);
   return response.data;
 };
 
@@ -42,6 +44,7 @@ const getConversations = async (patientId) => {
 
 export default {
   createMemory,
+  addMemory: createMemory, // Added alias to catch aggressively cached clients
   getMemories,
   updateMemory,
   deleteMemory,

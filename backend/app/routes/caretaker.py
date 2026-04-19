@@ -1,5 +1,5 @@
 import os
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Form
 from typing import Optional
 from sqlalchemy.orm import Session
 from app.database.postgres import get_db
@@ -8,16 +8,22 @@ from app.models.patient import Patient, CaretakerPatient
 from app.models.alert import Alert
 from app.models.medication import Medication
 from app.models.appointment import Appointment, AppointmentStatus
+from app.models.photo import Photo
 from app.schemas.caretaker import CaretakerDashboard, PatientStatusResponse, GeofenceSet, VitalsResponse, PhotoResponse, AppointmentCreate, AppointmentResponse, WellnessInsightsResponse
 from app.schemas.medication import MedicationCreate, MedicationUpdate, MedicationResponse
-from app.utils.jwt import get_current_user, require_caretaker
+from app.utils.jwt import get_current_user
+from app.core.access_control import require_caretaker
 from app.services import memory_service, cloudinary_service, pdf_service, alert_service, insights_service
+from app.services.teleconsult_service import teleconsult_provider
 import redis
 import json
 from datetime import datetime
 import uuid
 import tempfile
 from app.config import settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 try:
@@ -63,7 +69,9 @@ async def get_dashboard(current_user: User = Depends(require_caretaker), db: Ses
         recent_alerts=[{"id": str(a.id), "message": a.message, "severity": a.severity, "created_at": a.created_at.isoformat()} for a in alerts],
         medication_compliance_today=85.5, # Mock
         last_saathi_time=saathi_time,
-        last_vitals_time=vitals_time
+        last_vitals_time=vitals_time,
+        primary_doctor_id=patient.doctor_id,
+        primary_doctor_name=patient.doctor.full_name if patient.doctor else "Primary Physician"
     )
 
 @router.get("/patient/status", response_model=PatientStatusResponse)
@@ -228,7 +236,7 @@ async def delete_medication(medication_id: uuid.UUID, current_user: User = Depen
 @router.post("/photo/send")
 async def send_photo(
     patient_id: Optional[uuid.UUID] = Query(None), 
-    caption: str = None, 
+    caption: Optional[str] = Form(None), 
     file: UploadFile = File(...), 
     current_user: User = Depends(require_caretaker), 
     db: Session = Depends(get_db)
@@ -253,6 +261,7 @@ async def send_photo(
             cloudinary_url = await cloudinary_service.upload_file(temp_path, folder=f"patient-photos/{patient_id}")
         except Exception as e:
             # Fallback for dev environments without Cloudinary env vars
+            logger.error(f"Cloudinary Upload Failed: {e}")
             cloudinary_url = f"https://res.cloudinary.com/demo/image/upload/v1312461204/sample.jpg" 
 
         # Save to DB
@@ -293,6 +302,42 @@ async def get_photos(current_user: User = Depends(require_caretaker), db: Sessio
         results.append(p_dict)
         
     return results
+
+@router.delete("/photo/{photo_id}")
+async def delete_photo(photo_id: str, current_user: User = Depends(require_caretaker), db: Session = Depends(get_db)):
+    photo = db.query(Photo).filter(Photo.id == photo_id).first()
+    if not photo:
+        raise HTTPException(404, "Photo not found")
+        
+    # Security check: Ensure the photo belongs to a patient this caretaker manages
+    link = db.query(CaretakerPatient).filter(
+        CaretakerPatient.caretaker_id == current_user.id,
+        CaretakerPatient.patient_id == photo.patient_id
+    ).first()
+    
+    if not link:
+        raise HTTPException(403, "Not authorized to delete this photo")
+        
+    # Extricate public_id and delete from Cloudinary Bucket securely
+    if photo.cloudinary_url:
+        try:
+            parts = photo.cloudinary_url.split('/upload/')
+            if len(parts) == 2:
+                path_part = parts[1]
+                # Remove API version prefix if present (e.g., v1776629428/)
+                if path_part.startswith('v') and '/' in path_part:
+                    path_part = path_part.split('/', 1)[1]
+                # Remove file extension
+                public_id = path_part.rsplit('.', 1)[0]
+                
+                # Delete from Cloud
+                await cloudinary_service.delete_file(public_id)
+        except Exception as e:
+            logger.error(f"Failed to delete Cloudinary asset {photo.cloudinary_url}: {e}")
+
+    db.delete(photo)
+    db.commit()
+    return {"status": "success"}
 
 @router.post("/memory")
 async def create_memory(data: dict, current_user: User = Depends(require_caretaker)):
@@ -336,6 +381,12 @@ async def get_appointments(current_user: User = Depends(require_caretaker), db: 
 
 @router.post("/appointments", response_model=AppointmentResponse)
 async def create_appointment(data: AppointmentCreate, current_user: User = Depends(require_caretaker), db: Session = Depends(get_db)):
+    # Task List:
+    # - [x] Stabilize Login Page Redirect Loop
+    # - [x] Harden Teleconsultation Link Generation (Backend)
+    # - [x] Implement robust room naming in TeleconsultService (Backend)
+    # - [ ] Verify Jitsi connectivity with new URL pattern
+    
     appt = Appointment(
         patient_id=data.patient_id,
         doctor_id=data.doctor_id,
@@ -344,6 +395,10 @@ async def create_appointment(data: AppointmentCreate, current_user: User = Depen
         notes=data.notes,
         status=AppointmentStatus.pending
     )
+    
+    # Generate Teleconsultation Link (Mandatory for Virtual Care)
+    appt.meeting_url = teleconsult_provider.create_meeting(str(appt.id), str(appt.patient_id))
+    
     db.add(appt)
     db.commit()
     db.refresh(appt)
@@ -355,19 +410,29 @@ async def create_appointment(data: AppointmentCreate, current_user: User = Depen
         "scheduled_at": appt.scheduled_at,
         "status": appt.status.value,
         "notes": appt.notes,
+        "meeting_url": appt.meeting_url,
         "doctor_name": appt.doctor.full_name if appt.doctor else "Doctor"
     }
 
 @router.post("/reports/pdf")
 async def generate_report(data: dict, current_user: User = Depends(require_caretaker), db: Session = Depends(get_db)):
+    from fastapi.responses import FileResponse
+    import os
+    
     link = db.query(CaretakerPatient).filter(CaretakerPatient.caretaker_id == current_user.id).first()
     if not link:
         raise HTTPException(404, "No patient linked to generate report")
     
     period = data.get("period_days", 30)
-    url, public_id = await pdf_service.generate_patient_report(str(link.patient_id), period)
+    temp_path = await pdf_service.generate_patient_report(str(link.patient_id), period)
     
-    return {"status": "success", "url": url, "report_id": public_id}
+    filename = f"AlzAI_Report_{period}days.pdf"
+    return FileResponse(
+        path=temp_path,
+        media_type="application/pdf",
+        filename=filename,
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 @router.post("/link-patient")
 async def link_patient(data: dict, current_user: User = Depends(require_caretaker), db: Session = Depends(get_db)):
@@ -388,7 +453,7 @@ async def link_patient(data: dict, current_user: User = Depends(require_caretake
     new_link = CaretakerPatient(
         caretaker_id=current_user.id, 
         patient_id=patient.id,
-        relationship_type="primary"
+        relationship="primary"
     )
     db.add(new_link)
     db.commit()
