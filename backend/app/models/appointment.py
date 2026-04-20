@@ -12,6 +12,10 @@ class AppointmentStatus(str, enum.Enum):
     completed = "completed"
     cancelled = "cancelled"
 
+class TeleconsultMode(str, enum.Enum):
+    in_person = "in_person"
+    teleconsult = "teleconsult"
+
 class Appointment(Base):
     __tablename__ = "appointments"
 
@@ -21,6 +25,8 @@ class Appointment(Base):
     caretaker_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     scheduled_at = Column(DateTime, nullable=False)
     status = Column(Enum(AppointmentStatus), default=AppointmentStatus.pending)
+    mode = Column(Enum(TeleconsultMode), default=TeleconsultMode.in_person)
+    meeting_url = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
     reminder_sent = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)

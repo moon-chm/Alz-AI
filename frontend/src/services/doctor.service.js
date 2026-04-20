@@ -51,6 +51,30 @@ const getPatients = async () => {
   return response.data.patients || [];
 };
 
+const getMRIStatus = async (taskId) => {
+  const response = await api.get(`/doctor/mri/status/${taskId}`);
+  return response.data;
+};
+
+const getMRIAnalysis = async (patientId, scanId) => {
+  const response = await api.get(`/doctor/patient/${patientId}/mri/${scanId}/result`);
+  return response.data;
+};
+
+const confirmMRIAnalysis = async (historyId, confirm, note = '') => {
+  const response = await api.post('/doctor/mri/confirm', {
+    history_id: historyId,
+    confirm: confirm,
+    doctor_note: note
+  });
+  return response.data;
+};
+
+const getMRIHistory = async (patientId, limit = 10, offset = 0) => {
+  const response = await api.get(`/doctor/patient/${patientId}/mri/history?limit=${limit}&offset=${offset}`);
+  return response.data;
+};
+
 export default {
   getDashboard,
   addPatient,
@@ -58,7 +82,11 @@ export default {
   updatePatientLevel,
   getAnalytics,
   uploadMRI,
+  getMRIStatus,
+  getMRIAnalysis,
+  confirmMRIAnalysis,
   getAppointments,
   updateAppointment,
   getPatients,
+  getMRIHistory,
 };

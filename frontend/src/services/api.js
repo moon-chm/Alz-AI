@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: '/api',
-  withCredentials: true,
+  withCredentials: false,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -21,13 +21,39 @@ const processQueue = (error, token = null) => {
 };
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('alz_token');
+  const token = localStorage.getItem('access_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  
+  // Smart Header Guard: If sending FormData, don't force JSON content-type
+  if (config.data instanceof FormData) {
+    if (config.headers['Content-Type']) {
+      delete config.headers['Content-Type'];
+    }
+  }
+  
   return config;
 });
 
 api.interceptors.response.use(
   (response) => {
+    // If we have the wrapped structure, unwrap it for the rest of the app
+    if (response.data && typeof response.data === 'object' && 'success' in response.data) {
+      const { success, data, error, message } = response.data;
+      if (success) {
+        // Return only the inner data to keep existing code compatible
+        return {
+          ...response,
+          data: data,
+          meta: { message } // Optional helper if a component needs the message
+        };
+      } else {
+        // Handle explicit failure returned with 200/other code if necessary
+        // Re-routing to the error interceptor logic essentially
+        const err = new Error(error || message || 'API Error');
+        err.response = response;
+        return Promise.reject(err);
+      }
+    }
     return response;
   },
   async (error) => {
@@ -53,12 +79,14 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const response = await axios.post('/api/auth/refresh', {}, {
-          withCredentials: true
+        const refreshToken = localStorage.getItem('refresh_token');
+        const response = await axios.post('/api/auth/refresh', { refresh_token: refreshToken }, {
+          withCredentials: false
         });
         
-        const { access_token } = response.data;
-        localStorage.setItem('alz_token', access_token);
+        const { access_token, refresh_token } = response.data.data || response.data;
+        localStorage.setItem('access_token', access_token);
+        if (refresh_token) localStorage.setItem('refresh_token', refresh_token);
         
         api.defaults.headers.common['Authorization'] = 'Bearer ' + access_token;
         originalRequest.headers['Authorization'] = 'Bearer ' + access_token;
@@ -67,7 +95,8 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch (err) {
         processQueue(err, null);
-        localStorage.removeItem('alz_token');
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
         window.location.href = '/login';
         return Promise.reject(err);
       } finally {
@@ -75,8 +104,17 @@ api.interceptors.response.use(
       }
     }
     
-    if (error.response?.status === 422) {
-      console.warn("Validation Error:", error.response.data);
+    if (error.response?.status === 422 || error.response?.data?.success === false) {
+      // Formatted validation or clinical error from our contract
+      const errorData = error.response.data;
+      const validationDetail = errorData.error || errorData.message || errorData.detail || "Request failed";
+      console.warn("API Error:", validationDetail);
+      
+      // Map to the format standard UI components expect (.detail)
+      if (errorData) {
+        errorData.detail = validationDetail;
+      }
+      error.friendlyMessage = validationDetail;
     }
     
     return Promise.reject(error);

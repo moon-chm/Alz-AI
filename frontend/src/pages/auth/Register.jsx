@@ -12,7 +12,10 @@ const Register = () => {
     password: '',
     confirmPassword: '',
     phone: '',
-    nmc_number: ''
+    nmc_number: '',
+    specialization: '',
+    hospital_name: '',
+    patient_id: ''
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -58,13 +61,23 @@ const Register = () => {
 
     setLoading(true);
     try {
+      // Normalize payload outgoing values
+      const normalizedPhone = formData.phone.startsWith('+91') 
+        ? formData.phone 
+        : `+91${formData.phone}`;
+        
+      const normalizedNMC = (role === 'doctor' && !formData.nmc_number.startsWith('NMC-'))
+        ? `NMC-${formData.nmc_number}`
+        : formData.nmc_number;
+
       const payload = {
         full_name: formData.full_name,
+        role: role, // Explicitly include role
         email: formData.email,
         password: formData.password,
-        phone: formData.phone,
+        phone: normalizedPhone,
         ...(role === 'doctor' && { 
-          nmc_number: formData.nmc_number,
+          nmc_number: normalizedNMC,
           specialization: formData.specialization,
           hospital_name: formData.hospital_name
         }),
@@ -72,6 +85,8 @@ const Register = () => {
           patient_unique_id: formData.patient_id 
         })
       };
+
+      console.log('Final Registration Payload:', payload);
 
       if (role === 'doctor') {
         await authService.registerDoctor(payload);
@@ -90,6 +105,7 @@ const Register = () => {
         });
       }
     } catch (err) {
+      console.error('Registration API Error:', err.response?.data || err.message);
       const msg = err.response?.data?.detail || 'Registration failed';
       showError(msg);
       setErrors({ submit: msg });

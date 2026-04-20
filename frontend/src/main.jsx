@@ -13,6 +13,16 @@ const queryClient = new QueryClient({
   },
 });
 
+// Migration Cleanup: Remove legacy token keys once
+const legacyToken = localStorage.getItem('alz_token');
+if (legacyToken) {
+  console.log('Migrating from legacy alz_token...');
+  localStorage.removeItem('alz_token');
+  // Optional: clear entire storage if we want a total reset
+  // localStorage.clear();
+  window.location.reload();
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>

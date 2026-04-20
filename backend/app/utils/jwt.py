@@ -49,13 +49,14 @@ def blacklist_token(token: str):
     except HTTPException:
         pass # Already invalid
 
-def get_current_user(request: Request, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
-    # Support HTTP-only cookie extraction if header fails
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+    """Read the token exclusively from the Authorization header as Bearer token."""
     if not token:
-        token = request.cookies.get("access_token")
-        
-    if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     payload = decode_token(token)
     if payload.get("type") != "access":
@@ -70,12 +71,5 @@ def get_current_user(request: Request, token: str = Depends(oauth2_scheme), db: 
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
 
-def require_doctor(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role.value != 'doctor' and current_user.role != 'doctor':
-        raise HTTPException(status_code=403, detail="Not authorized, doctor role required")
-    return current_user
 
-def require_caretaker(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role.value != 'caretaker' and current_user.role != 'caretaker':
-        raise HTTPException(status_code=403, detail="Not authorized, caretaker role required")
-    return current_user
+# Guards moved to app.core.access_control

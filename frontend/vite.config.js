@@ -6,8 +6,12 @@ export default defineConfig({
   server: {
     port: 3000,
     host: '0.0.0.0',
+    strictPort: true,
+    allowedHosts: true, // Allow Nginx to proxy without 403
     hmr: {
-      clientPort: 80
+      clientPort: 80,
+      protocol: 'ws',
+      overlay: false
     },
     proxy: {
       '/api': {

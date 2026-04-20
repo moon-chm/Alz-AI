@@ -2,15 +2,16 @@ import redis
 from app.config import settings
 
 def get_redis():
+    # Attempt connection with settings.redis_url which defaults to 'redis://redis:6379' in Docker
+    # or use direct fallback string
+    url = getattr(settings, 'redis_url', 'redis://redis:6379/0')
     try:
-        # Defaulting to localhost for local dev if REDIS_URL not present
-        pool = redis.ConnectionPool.from_url(
-            getattr(settings, 'redis_url', 'redis://localhost:6379/0'), 
-            decode_responses=True
-        )
-        return redis.Redis(connection_pool=pool)
+        pool = redis.ConnectionPool.from_url(url, decode_responses=True)
+        r = redis.Redis(connection_pool=pool)
+        r.ping() # Verify connectivity on init
+        return r
     except Exception as e:
-        print(f"Failed to connect to Redis: {e}")
+        print(f"Warning: Redis connection failed on {url}: {e}")
         return None
 
 redis_client = get_redis()

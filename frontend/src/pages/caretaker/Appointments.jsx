@@ -22,6 +22,10 @@ const Appointments = () => {
   });
 
   useEffect(() => {
+    console.log("Appointments Page Mounted. Context:", { 
+      patientId: selectedPatient?.id, 
+      doctorId: selectedPatient?.primary_doctor_id 
+    });
     if (selectedPatient?.id) fetchAppointments();
   }, [selectedPatient]);
 
@@ -41,16 +45,25 @@ const Appointments = () => {
     e.preventDefault();
     if (!selectedPatient?.id) return;
     
+    // Guard Clause: Block if doctor info is missing
+    if (!selectedPatient?.primary_doctor_id) {
+       console.error("BLOCKING SUBMISSION: Missing doctor context", selectedPatient);
+       showError("Clinical Context Missing: Cannot verify primary physician. Please refresh the page.");
+       return;
+    }
+
+    const payload = {
+      patient_id: selectedPatient.id,
+      doctor_id: selectedPatient.primary_doctor_id, 
+      scheduled_at: new Date(`${formData.scheduled_at_date}T${formData.scheduled_at_time}`).toISOString(),
+      notes: formData.notes
+    };
+
+    console.log("SUBMITTING APPOINTMENT:", payload);
+    
     setIsSubmitting(true);
     try {
-      const scheduledAt = new Date(`${formData.scheduled_at_date}T${formData.scheduled_at_time}`);
-      
-      await caretakerService.createAppointment({
-        patient_id: selectedPatient.id,
-        doctor_id: selectedPatient.doctor_id, // Default to primary doctor for now
-        scheduled_at: scheduledAt.toISOString(),
-        notes: formData.notes
-      });
+      await caretakerService.createAppointment(payload);
       
       showSuccess('Appointment scheduled successfully');
       setShowAddForm(false);
@@ -100,10 +113,17 @@ const Appointments = () => {
              <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                    <label className="block text-sm font-bold text-gray-700 mb-2">Primary Doctor</label>
-                   <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-600 flex items-center gap-3">
-                      <User className="w-5 h-5" /> 
-                      <span className="font-medium">Assigned Primary Physician</span>
-                   </div>
+                    <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-600 flex items-center gap-3">
+                       <User className="w-5 h-5" /> 
+                       <span className="font-medium text-gray-800">
+                          {selectedPatient?.primary_doctor_name || 'Loading Physician Data...'}
+                       </span>
+                    </div>
+                    {!selectedPatient?.primary_doctor_id && (
+                       <p className="mt-1 text-xs text-red-500 font-bold flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" /> Waiting for physician verification...
+                       </p>
+                    )}
                    <p className="mt-1 text-xs text-gray-400">Appointments are currently linked to the assigned doctor.</p>
                 </div>
 

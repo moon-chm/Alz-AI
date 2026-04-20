@@ -7,18 +7,22 @@ import { Pill, Check, Clock, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 
 const MedicationTracker = () => {
-  const { selectedPatient } = usePatientContext();
+  const { selectedPatient, loading: contextLoading } = usePatientContext();
   const [schedule, setSchedule] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    console.log("Medications Page Mounted. Context Strategy:", {
+       patientId: selectedPatient?.id,
+       rehydrating: contextLoading
+    });
     if (selectedPatient?.id) fetchSchedule();
-  }, [selectedPatient]);
+  }, [selectedPatient, contextLoading]);
 
   const fetchSchedule = async () => {
     setLoading(true);
     try {
-      const data = await caretakerService.getMedSchedule(selectedPatient.id);
+      const data = await caretakerService.getMedications();
       setSchedule(data);
     } catch (err) {
       showError('Failed to load medication schedule');
@@ -29,7 +33,7 @@ const MedicationTracker = () => {
 
   const handleTakeMed = async (medId) => {
     try {
-      await caretakerService.logMedication(selectedPatient.id, medId, 'taken');
+      await caretakerService.updateMedication(medId, { status: 'taken' });
       showSuccess('Medication marked as taken');
       fetchSchedule();
     } catch (err) {
@@ -46,6 +50,28 @@ const MedicationTracker = () => {
     }
   };
 
+  // --- Guards (Before Return) ---
+  if (contextLoading && !selectedPatient) {
+    return (
+      <Layout title="Initializing Medications">
+        <div className="flex flex-col items-center justify-center min-h-[400px]">
+           <div className="animate-spin w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full mb-4"></div>
+           <p className="text-gray-500 font-medium">Synchronizing clinical prescription context...</p>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!selectedPatient) {
+    return (
+      <Layout title="Medication Tracker">
+        <div className="p-8 text-center bg-white m-8 rounded-xl border border-gray-100 font-medium text-gray-500">
+          No patient linked to this account.
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout title="Medication Tracker">
       <div className="max-w-5xl mx-auto space-y-6 pb-12">
@@ -54,13 +80,13 @@ const MedicationTracker = () => {
            <div className="flex items-center gap-4">
               <div className="p-3 bg-blue-100 text-blue-600 rounded-full">
                 <Pill className="w-6 h-6" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">Today's Schedule</h2>
-                <p className="text-gray-500 font-medium">{format(new Date(), 'EEEE, MMMM do, yyyy')}</p>
-              </div>
-           </div>
-        </div>
+               </div>
+               <div>
+                 <h2 className="text-xl font-bold text-gray-900">Today's Schedule</h2>
+                 <p className="text-gray-500 font-medium">{format(new Date(), 'EEEE, MMMM do, yyyy')}</p>
+               </div>
+            </div>
+         </div>
 
         {loading ? (
           <div className="flex justify-center p-12"><div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full"></div></div>

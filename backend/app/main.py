@@ -15,8 +15,13 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Tighten in production
-    allow_credentials=True,
+    allow_origins=[
+        "http://localhost",
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1"
+    ],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -48,19 +53,32 @@ import asyncio
 async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
-        content={"success": False, "message": "Internal Server Error", "error": str(exc)},
+        content={
+            "success": False, 
+            "data": None,
+            "message": "Internal Server Error", 
+            "error": str(exc)
+        },
     )
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     errors = []
     for err in exc.errors():
-        loc = err.get("loc", ["body"])
-        field = loc[-1] if len(loc) > 1 else str(loc)
-        errors.append(f"{field}: {err.get('msg')}")
+        field = ".".join(str(loc) for loc in err.get("loc", []))
+        msg = err.get("msg", "Invalid value")
+        errors.append(f"{field}: {msg}")
+    
+    error_msg = "; ".join(errors)
+    print(f"❌ VALIDATION ERROR: {error_msg}")  # Log to console for debugging
     return JSONResponse(
         status_code=422,
-        content={"success": False, "message": "Validation Error", "error": ", ".join(errors)},
+        content={
+            "success": False, 
+            "data": None,
+            "message": "Data validation failed", 
+            "error": error_msg
+        },
     )
 
 

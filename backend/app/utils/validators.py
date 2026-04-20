@@ -1,7 +1,7 @@
 import re
 
 def validate_indian_phone(phone: str) -> bool:
-    pattern = r'^[6-9]\d{9}$'
+    pattern = r'^(\+91)?[6-9]\d{9}$'
     return bool(re.match(pattern, phone.strip()))
 
 def validate_nmc_number(nmc: str) -> bool:
