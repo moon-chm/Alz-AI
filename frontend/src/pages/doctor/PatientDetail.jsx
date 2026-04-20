@@ -48,7 +48,6 @@ const PatientDetail = () => {
       setHistoryLoading(false);
     }
   };
-
   useEffect(() => {
     if (id) fetchMedications();
   }, [id]);
