@@ -9,7 +9,7 @@ class DoctorRegister(BaseModel):
     password: str = Field(min_length=8)
     full_name: str
     phone: str
-    nmc_number: str
+    nmc_number: Optional[str] = None
     specialization: Optional[str] = None
     hospital_name: Optional[str] = None
 
@@ -52,7 +52,7 @@ class TokenResponse(BaseModel):
     is_mock: Optional[bool] = False
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    refresh_token: Optional[str] = None
 
 
 class OTPSendRequest(BaseModel):

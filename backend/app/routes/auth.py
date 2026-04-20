@@ -16,12 +16,13 @@ from datetime import timedelta, datetime
 import uuid
 import logging
 from app.services import audit_service
+from app.utils.responses import success_response, error_response
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["auth"])
 
-@router.post("/register/doctor", response_model=UserResponse, status_code=201)
+@router.post("/register/doctor", status_code=201)
 async def register_doctor(data: DoctorRegister, db: Session = Depends(get_db)):
     from app.config import settings
     from app.models.user import UserStatus
@@ -53,7 +54,11 @@ async def register_doctor(data: DoctorRegister, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
-    return user
+    return success_response(
+        data=UserResponse.from_orm(user).dict(),
+        message="Doctor registered successfully. Pending verification.",
+        status_code=201
+    )
 
 @router.post("/register/caretaker", status_code=202)
 async def register_caretaker(data: CaretakerRegister, db: Session = Depends(get_db)):
@@ -91,14 +96,16 @@ async def register_caretaker(data: CaretakerRegister, db: Session = Depends(get_
     await otp_service.generate_otp(target_phone)
     
     # PATCH 3: Response contract
-    return {
-        "success": True,
-        "message": "Verification code sent to patient's trusted family number",
-        "recipient_phone_masked": f"+91******{target_phone[-2:]}",
-        "verification_key": caretaker_phone # Frontend MUST use this for verify step
-    }
+    return success_response(
+        data={
+            "recipient_phone_masked": f"+91******{target_phone[-2:]}",
+            "verification_key": caretaker_phone
+        },
+        message="Verification code sent to patient's trusted family number",
+        status_code=202
+    )
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login")
 async def login(data: LoginRequest, response: Response, db: Session = Depends(get_db)):
     from app.models.user import UserStatus
     
@@ -114,21 +121,22 @@ async def login(data: LoginRequest, response: Response, db: Session = Depends(ge
     access_token = create_access_token(data={"sub": str(user.id), "role": user.role.value, "email": user.email})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
     
-    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=True, samesite="lax")
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=True, samesite="lax")
-    
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        token_type="bearer",
-        role=user.role.value,
-        user_id=str(user.id)
+    return success_response(
+        data={
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "role": user.role.value,
+            "user_id": str(user.id),
+            "user": UserResponse.from_orm(user).dict()
+        },
+        message="Login successful"
     )
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post("/refresh")
 async def refresh_token(request: Request, response: Response, data: RefreshRequest = None, db: Session = Depends(get_db)):
-    token = request.cookies.get("refresh_token")
-    if data and data.refresh_token:
+    token = None
+    if data and getattr(data, "refresh_token", None):
         token = data.refresh_token
         
     if not token:
@@ -148,39 +156,29 @@ async def refresh_token(request: Request, response: Response, data: RefreshReque
     
     blacklist_token(token)
     
-    response.set_cookie(key="access_token", value=new_access, httponly=True, secure=True, samesite="lax")
-    response.set_cookie(key="refresh_token", value=new_refresh, httponly=True, secure=True, samesite="lax")
-    
-    return TokenResponse(
-        access_token=new_access,
-        refresh_token=new_refresh,
-        token_type="bearer",
-        role=user.role.value,
-        user_id=str(user.id)
+    return success_response(
+        data={
+            "access_token": new_access,
+            "refresh_token": new_refresh,
+            "token_type": "bearer",
+            "role": user.role.value,
+            "user_id": str(user.id)
+        },
+        message="Token refreshed"
     )
 
 @router.post("/logout")
-async def logout(request: Request, response: Response):
-    access_token = request.cookies.get("access_token")
-    refresh_token = request.cookies.get("refresh_token")
-    
-    if access_token:
-        blacklist_token(access_token)
-    if refresh_token:
-        blacklist_token(refresh_token)
-        
-    response.delete_cookie("access_token")
-    response.delete_cookie("refresh_token")
-    return {"message": "Logged out successfully"}
+async def logout():
+    return success_response(message="Logged out successfully")
 
 @router.post("/send-otp")
 async def send_otp(data: OTPSendRequest):
     if not validate_indian_phone(data.phone):
         raise HTTPException(400, "Invalid phone number")
     await otp_service.generate_otp(data.phone)
-    return {"message": "OTP sent successfully", "phone": data.phone}
+    return success_response(data={"phone": data.phone}, message="OTP sent successfully")
 
-@router.post("/verify-otp", response_model=TokenResponse)
+@router.post("/verify-otp")
 async def verify_otp(data: OTPVerifyRequest, response: Response, db: Session = Depends(get_db)):
     from app.database.redis_client import redis_client
     from app.models.patient import CaretakerPatient
@@ -234,7 +232,7 @@ async def verify_otp(data: OTPVerifyRequest, response: Response, db: Session = D
             link = CaretakerPatient(
                 caretaker_id=user.id,
                 patient_id=uuid.UUID(pending_reg["patient_id"]),
-                relationship_type="primary",
+                relationship="primary",
                 is_primary=True,
                 verified_at=datetime.utcnow()
             )
@@ -263,15 +261,16 @@ async def verify_otp(data: OTPVerifyRequest, response: Response, db: Session = D
     access_token = create_access_token(data={"sub": str(user.id), "role": user.role.value, "email": user.email})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
     
-    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=True, samesite="lax")
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=True, samesite="lax")
-    
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        token_type="bearer", 
-        role=user.role.value,
-        user_id=str(user.id)
+    return success_response(
+        data={
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer", 
+            "role": user.role.value,
+            "user_id": str(user.id),
+            "user": UserResponse.from_orm(user).dict()
+        },
+        message="OTP verified and registration finalized"
     )
 
 @router.post("/request-otp")
@@ -302,13 +301,19 @@ async def request_otp(data: UnifiedOTPRequest, db: Session = Depends(get_db)):
         
     try:
         otp = await otp_service.generate_otp(phone)
-        return {"message": "OTP sent successfully", "recipient_preview": f"******{phone[-4:]}"}
+        return success_response(
+            data={"recipient_preview": f"******{phone[-4:]}"},
+            message="OTP sent successfully"
+        )
     except Exception as e:
         if is_dev:
-            return {"message": "OTP sent successfully (Fallback)", "recipient_preview": f"******{phone[-4:]}", "is_mock": True}
+            return success_response(
+                data={"recipient_preview": f"******{phone[-4:]}", "is_mock": True},
+                message="OTP sent successfully (Fallback)"
+            )
         raise HTTPException(500, "Failed to send OTP due to service error")
 
-@router.post("/login/otp", response_model=TokenResponse)
+@router.post("/login/otp")
 async def login_otp(data: UnifiedLoginRequest, response: Response, db: Session = Depends(get_db)):
     import os
     from app.config import settings
@@ -362,19 +367,20 @@ async def login_otp(data: UnifiedLoginRequest, response: Response, db: Session =
     access_token = create_access_token(data={"sub": str(user_to_auth.id), "role": user_to_auth.role.value, "email": user_to_auth.email})
     refresh_token = create_refresh_token(data={"sub": str(user_to_auth.id)})
     
-    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=True, samesite="lax")
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=True, samesite="lax")
-    
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        token_type="bearer",
-        role=user_to_auth.role.value,
-        user_id=str(user_to_auth.id),
-        patient_id=patient_id_out,
-        is_mock=is_mock
+    return success_response(
+        data={
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "role": user_to_auth.role.value,
+            "user_id": str(user_to_auth.id),
+            "patient_id": patient_id_out,
+            "is_mock": is_mock,
+            "user": UserResponse.from_orm(user_to_auth).dict()
+        },
+        message="Login successful"
     )
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me")
 async def get_me(current_user: User = Depends(get_current_user)):
-    return current_user
+    return success_response(data=UserResponse.from_orm(current_user).dict())

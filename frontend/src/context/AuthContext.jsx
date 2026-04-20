@@ -11,10 +11,7 @@ export const AuthProvider = ({ children }) => {
 
   const initAuth = async () => {
     try {
-      const storedToken = localStorage.getItem('alz_token');
-      // If we have any token, we try fetching full user profile.
-      // If token is expired, the interceptors in api.js will automatically try to refresh it
-      // via the HTTP-only refresh cookie before throwing a 401 error.
+      const storedToken = localStorage.getItem('access_token');
       if (storedToken) {
         const userData = await authService.getMe();
         setToken(storedToken);
@@ -35,10 +32,6 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = (newToken, userData) => {
-    // PATCH 8: Session Purity - Clear legacy state
-    localStorage.removeItem('alz_token');
-    
-    localStorage.setItem('alz_token', newToken);
     setToken(newToken);
     setUser(userData);
   };
@@ -49,7 +42,8 @@ export const AuthProvider = ({ children }) => {
     } catch (e) {
       console.log('Server logout failed, clearing local state anyway');
     }
-    localStorage.removeItem('alz_token');
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
     setToken(null);
     setUser(null);
     window.location.href = '/login';

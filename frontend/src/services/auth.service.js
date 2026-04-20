@@ -2,13 +2,18 @@ import api from './api';
 
 const login = async (email, password) => {
   const response = await api.post('/auth/login', { email, password });
-  const { access_token, role } = response.data;
+  // response.data is already unwrapped by the interceptor
+  const { access_token, refresh_token, role, user } = response.data;
+  
   if (access_token) {
-    localStorage.setItem('alz_token', access_token);
-    // Fetch full user data immediately using the newly set token
+    localStorage.setItem('access_token', access_token);
+    if (refresh_token) localStorage.setItem('refresh_token', refresh_token);
+    
+    // Set for current instance immediate use
     api.defaults.headers.common['Authorization'] = 'Bearer ' + access_token;
-    const userRes = await api.get('/auth/me');
-    return { token: access_token, role, user: userRes.data };
+    
+    // The login response already contains the user object in my new contract
+    return { token: access_token, role, user: user };
   }
   return response.data;
 };
@@ -33,30 +38,26 @@ const sendOTP = async (phone) => {
 };
 
 const verifyOTP = async (verificationKey, otp) => {
-  // PATCH 4: Use verification_key (caretaker_phone) for identity reference
-  // PATCH 5: Direct verification endpoint
   const response = await api.post('/auth/verify-otp', { 
     phone: verificationKey,
     otp 
   });
   
-  const { access_token, role, user_id } = response.data;
+  const { access_token, refresh_token, role, user } = response.data;
   if (access_token) {
-    // PATCH 8: Clear any stale session first
-    localStorage.removeItem('alz_token');
+    localStorage.setItem('access_token', access_token);
+    if (refresh_token) localStorage.setItem('refresh_token', refresh_token);
     
-    localStorage.setItem('alz_token', access_token);
     api.defaults.headers.common['Authorization'] = 'Bearer ' + access_token;
     
-    // Fetch full profile to ensure context is pure (Patch 6)
-    const userRes = await api.get('/auth/me');
-    return { token: access_token, role, user: userRes.data };
+    return { token: access_token, role, user: user };
   }
   return response.data;
 };
 
 const logout = () => {
-  localStorage.removeItem('alz_token');
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
   window.location.href = '/login';
 };
 
@@ -83,7 +84,7 @@ const decodeToken = (token) => {
 };
 
 const isTokenValid = () => {
-  const token = localStorage.getItem('alz_token');
+  const token = localStorage.getItem('access_token');
   if (!token) return false;
   const decoded = decodeToken(token);
   if (!decoded) return false;

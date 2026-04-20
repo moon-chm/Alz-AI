@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database.postgres import get_db
-from app.models.appointment import Appointment, AppointmentStatus
+from app.models.appointment import Appointment, AppointmentStatus, TeleconsultMode
 from app.models.user import User, RoleEnum
 from app.models.patient import Patient, CaretakerPatient
+from app.services.teleconsult_service import jitsi_provider
 from app.utils.jwt import get_current_user
 from datetime import datetime, timedelta
 import uuid
@@ -36,7 +37,9 @@ async def list_appointments(current_user: User = Depends(get_current_user), db: 
             "doctor_id": app.doctor_id,
             "scheduled_at": app.scheduled_at,
             "status": app.status,
-            "notes": app.notes
+            "notes": app.notes,
+            "mode": app.mode,
+            "meeting_url": app.meeting_url
         }
         result.append(app_data)
         
@@ -44,12 +47,26 @@ async def list_appointments(current_user: User = Depends(get_current_user), db: 
 
 @router.post("/")
 async def create_appointment(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    mode = data.get("mode", TeleconsultMode.in_person)
+    meeting_url = None
+    
+    if mode == TeleconsultMode.teleconsult:
+        # Generate deterministic meeting link
+        # Format: alzai-{patient_unique_id}-{timestamp}
+        patient = db.query(Patient).filter(Patient.id == data["patient_id"]).first()
+        meeting_url = jitsi_provider.generate_meeting_link(
+            appointment_id=str(uuid.uuid4())[:8], # Sub-ID for room uniqueness
+            patient_id=patient.patient_unique_id if patient else str(data["patient_id"])
+        )
+
     app = Appointment(
         patient_id=data["patient_id"],
         doctor_id=data["doctor_id"],
         caretaker_id=data.get("caretaker_id"),
         scheduled_at=data["scheduled_at"],
-        notes=data.get("notes", "")
+        notes=data.get("notes", ""),
+        mode=mode,
+        meeting_url=meeting_url
     )
     db.add(app)
     db.commit()

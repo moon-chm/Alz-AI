@@ -46,13 +46,13 @@ services:
   redis:
     image: redis:7-alpine
     container_name: alzai-redis
-    command: redis-server --appendonly yes
+    command: redis-server --requirepass ${REDIS_PASSWORD:-f3gNaTkHEL3_04qc2y90qEz_c5b5umHp} --appendonly yes
     volumes:
       - redis_data:/data
     networks:
       - alzai-net
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-f3gNaTkHEL3_04qc2y90qEz_c5b5umHp}", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -113,8 +113,29 @@ services:
         condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     networks:
       - alzai-net
+
+  worker:
+    build: ./backend
+    container_name: alzai-worker
+    command: celery -A app.celery_app worker --loglevel=info
+    env_file: .env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+    networks:
+      - alzai-net
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.celery_app inspect ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   frontend:
     build: ./frontend

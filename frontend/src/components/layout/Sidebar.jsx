@@ -48,7 +48,7 @@ const Sidebar = () => {
               <NavLink to="/doctor/dashboard" className={activeLinkStyle} end>
                 <Home className="w-5 h-5" /> Dashboard
               </NavLink>
-              <NavLink to="/doctor/patient/add" className={activeLinkStyle}>
+              <NavLink to="/doctor/patient/create" className={activeLinkStyle}>
                 <UserPlus className="w-5 h-5" /> Add Patient
               </NavLink>
               <NavLink to="/doctor/appointments" className={activeLinkStyle}>

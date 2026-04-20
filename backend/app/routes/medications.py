@@ -54,7 +54,7 @@ async def delete_medication(id: uuid.UUID, current_user: User = Depends(get_curr
 
 @router.get("/{patient_id}/compliance")
 async def get_compliance(patient_id: uuid.UUID, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # Mocking compliance 7-day grid
+    # ... existing compliance logic ...
     meds = db.query(Medication).filter(Medication.patient_id == patient_id, Medication.is_active == True).all()
     base = datetime.utcnow()
     dates = [(base - timedelta(days=x)).strftime("%Y-%m-%d") for x in range(6, -1, -1)]
@@ -73,3 +73,26 @@ async def get_compliance(patient_id: uuid.UUID, current_user: User = Depends(get
             "days": days
         })
     return result
+
+@router.get("/{patient_id}/daily-schedule")
+async def get_daily_schedule(patient_id: uuid.UUID, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    meds = db.query(Medication).filter(Medication.patient_id == patient_id, Medication.is_active == True).all()
+    
+    events = []
+    for m in meds:
+        # scheduled_times is a list like ["08:00", "20:00"]
+        times = m.scheduled_times if isinstance(m.scheduled_times, list) else []
+        for t in times:
+            events.append({
+                "id": f"med-{m.id}-{t}",
+                "type": "medication",
+                "title": m.name,
+                "subtitle": m.dosage,
+                "time": t,
+                "status": "pending",
+                "medication_id": m.id
+            })
+            
+    # Sort events by time
+    events.sort(key=lambda x: x["time"])
+    return events

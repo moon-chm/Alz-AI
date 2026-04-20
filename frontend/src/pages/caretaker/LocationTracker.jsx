@@ -9,7 +9,7 @@ import { formatDistanceToNow } from 'date-fns';
 import useWebSocket from '../../hooks/useWebSocket';
 
 const LocationTracker = () => {
-  const { selectedPatient } = usePatientContext();
+  const { selectedPatient, loading: contextLoading } = usePatientContext();
   const [location, setLocation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [savingGeofence, setSavingGeofence] = useState(false);
@@ -23,6 +23,11 @@ const LocationTracker = () => {
   });
 
   useEffect(() => {
+    console.log("Monitor Page Mounted. Context Strategy:", {
+       patientId: selectedPatient?.id,
+       rehydrating: contextLoading
+    });
+
     if (selectedPatient?.id) {
       fetchLocation();
       
@@ -35,7 +40,7 @@ const LocationTracker = () => {
       
       return () => clearInterval(interval);
     }
-  }, [selectedPatient, isConnected]);
+  }, [selectedPatient, isConnected, contextLoading]);
 
   const fetchLocation = async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -53,18 +58,37 @@ const LocationTracker = () => {
     if (!selectedPatient?.id) return;
     setSavingGeofence(true);
     try {
-      await caretakerService.setGeofence(selectedPatient.id, {
-        center: coordinates[0],
-        radius_meters: 500
-      });
+      // Map the full polygon array to match backend GeofenceSet schema: List[Dict[str, float]]
+      const payload = {
+        coordinates: coordinates.map(pt => ({
+          lat: parseFloat(pt.lat),
+          lng: parseFloat(pt.lng)
+        }))
+      };
+      
+      console.log("Saving Safe Zone Polygon:", payload);
+      await caretakerService.setGeofence(selectedPatient.id, payload);
+      
       showSuccess('Safe zone updated successfully');
       fetchLocation();
     } catch (err) {
+      console.error("Geofence Save Error:", err);
       showError('Failed to save safe zone');
     } finally {
       setSavingGeofence(false);
     }
   };
+
+  if (contextLoading && !selectedPatient) {
+     return (
+       <Layout title="Initializing Monitor">
+         <div className="flex flex-col items-center justify-center min-h-[400px]">
+            <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
+            <p className="text-gray-500 font-medium">Re-establishing clinical monitor context...</p>
+         </div>
+       </Layout>
+     );
+  }
 
   if (!selectedPatient) return <Layout title="Location Tracker"><div className="p-8 text-center bg-white m-8 rounded-xl border border-gray-100 font-medium">No patient selected</div></Layout>;
 

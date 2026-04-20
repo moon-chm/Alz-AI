@@ -15,9 +15,7 @@ const MemoryCard = ({ memory, onEdit, onDelete }) => {
   };
 
   const handleDelete = () => {
-    if (window.confirm('Are you sure you want to delete this memory?')) {
-      onDelete(memory.id);
-    }
+    onDelete(memory.id);
   };
 
   return (

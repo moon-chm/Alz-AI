@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 import enum
-from sqlalchemy import Column, String, Boolean, DateTime, Time, Enum
+from sqlalchemy import Column, String, Boolean, DateTime, Time, Enum, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.database.postgres import Base
@@ -32,11 +32,19 @@ class User(Base):
     
     # Verification and status
     status = Column(Enum(UserStatus), default=UserStatus.pending)
+    under_dispute = Column(Boolean, default=False)
     
     device_fingerprint = Column(String, nullable=True)
     dnd_start = Column(Time, nullable=True)
     dnd_end = Column(Time, nullable=True)
+    
+    last_login = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_user_nmc", "nmc_number"),
+    )
 
     # Relationships
     patients = relationship("Patient", back_populates="doctor", foreign_keys="[Patient.doctor_id]")

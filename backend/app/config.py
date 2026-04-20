@@ -54,6 +54,18 @@ class Settings(BaseSettings):
     latency_threshold: float = 8.0  # Seconds
     preferred_ai_provider: str = 'ollama'  # 'ollama' or 'groq'
 
+    # ─── CLINICAL MRI & TELECONSULT ──────────────────────────────
+    mri_model_provider: str = "local_torch" # Options: mock, local_tf, local_torch
+    mri_model_path_tf: str = "/app/app/models/mri/resnet_v1.h5"
+    mri_model_path_torch: str = "/app/app/models/mri/efficientnet_v1_torch.pth"
+    mri_fallback_to_mock: bool = True
+    mri_confidence_threshold: float = 0.75
+    mri_url_expiry_minutes: int = 60
+    mri_inference_timeout: float = 60.0 # Increased for Local AI
+    
+    teleconsult_provider: str = "jitsi"
+    jitsi_base_url: str = "https://meet.jit.si"
+
 
 @lru_cache()
 def get_settings():

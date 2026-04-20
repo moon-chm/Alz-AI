@@ -48,3 +48,13 @@ async def require_patient_access(patient_id: UUID, current_user: User = Depends(
         status_code=status.HTTP_403_FORBIDDEN,
         detail="Access denied: Role-based authorization failed."
     )
+
+def require_doctor(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role.value != 'doctor' and current_user.role != 'doctor':
+        raise HTTPException(status_code=403, detail="Not authorized, doctor role required")
+    return current_user
+
+def require_caretaker(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role.value != 'caretaker' and current_user.role != 'caretaker':
+        raise HTTPException(status_code=403, detail="Not authorized, caretaker role required")
+    return current_user

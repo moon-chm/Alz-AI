@@ -61,7 +61,7 @@ const DoctorDashboard = () => {
               <p className="text-gray-500">Here's your patient overview for today.</p>
             </div>
             <button 
-              onClick={() => navigate('/doctor/patient/new')}
+              onClick={() => navigate('/doctor/patient/create')}
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 shadow-sm"
             >
               <PlusCircle className="w-5 h-5" />
@@ -162,7 +162,7 @@ const DoctorDashboard = () => {
               </p>
               {!searchTerm && (
                 <button 
-                  onClick={() => navigate('/doctor/patient/new')}
+                  onClick={() => navigate('/doctor/patient/create')}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
                 >
                   Add Patient

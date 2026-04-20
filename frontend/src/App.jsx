@@ -21,6 +21,7 @@ import DoctorDashboard from './pages/doctor/DoctorDashboard';
 import PatientDetail from './pages/doctor/PatientDetail';
 import PatientForm from './pages/doctor/PatientForm';
 import MRIAnalysis from './pages/doctor/MRIAnalysis';
+import DoctorAppointments from './pages/doctor/DoctorAppointments';
 
 // Caretaker Pages
 import CaretakerDashboard from './pages/caretaker/CaretakerDashboard';
@@ -37,7 +38,7 @@ import Settings from './pages/shared/Settings';
 const App = () => {
   return (
     <ErrorBoundary>
-      <Router>
+      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AuthProvider>
           <PatientProvider>
             
@@ -53,8 +54,8 @@ const App = () => {
               {/* Doctor Routes */}
               <Route path="/doctor" element={<RoleRoute requiredRole="doctor" />}>
                 <Route path="dashboard" element={<DoctorDashboard />} />
-                <Route path="patient/add" element={<PatientForm />} />
-                <Route path="appointments" element={<div className="p-8"><h1 className="text-2xl font-bold">Doctor Appointments (Coming Soon)</h1></div>} />
+                <Route path="patient/create" element={<PatientForm />} />
+                <Route path="appointments" element={<DoctorAppointments />} />
                 <Route path="patient/:id" element={<PatientDetail />} />
                 <Route path="patient/:id/mri" element={<MRIAnalysis />} />
               </Route>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
 import usePatient from '../../hooks/usePatient';
 import PatientIDCard from '../../components/doctor/PatientIDCard';
@@ -13,11 +13,13 @@ import AlertFeed from '../../components/caretaker/AlertFeed';
 import { ArrowLeft, Activity, Heart, Moon, Pill, BrainCircuit, FileImage, Video, Plus, Trash2, Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import api from '../../services/api';
+import doctorService from '../../services/doctor.service';
 
 const PatientDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('overview');
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState(location.state?.tab || 'overview');
   
   const { patient, loading, error, analytics, refetch } = usePatient(id);
   const [medications, setMedications] = useState([]);
@@ -25,6 +27,27 @@ const PatientDetail = () => {
   const [medSaving, setMedSaving] = useState(false);
   const [medForm, setMedForm] = useState({ name: '', dosage: '', scheduled_times: '' });
 
+  const [mriHistory, setMriHistory] = useState({ items: [], total: 0, page: 1, pages: 1 });
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === 'scans' && id) {
+      fetchMRIHistory(1);
+    }
+  }, [activeTab, id]);
+
+  const fetchMRIHistory = async (page) => {
+    setHistoryLoading(true);
+    try {
+      const res = await doctorService.getMRIHistory(id, 10, (page - 1) * 10);
+      const payload = res.data !== undefined && res.success !== undefined ? res.data : res;
+      if (payload) setMriHistory(payload);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
   useEffect(() => {
     if (id) fetchMedications();
   }, [id]);
@@ -171,6 +194,12 @@ const PatientDetail = () => {
           >
             Vitals & Meds
           </button>
+          <button
+            onClick={() => setActiveTab('scans')}
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'scans' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
+          >
+            MRI Scans
+          </button>
         </div>
 
         {/* Tab Content */}
@@ -210,7 +239,7 @@ const PatientDetail = () => {
             </div>
 
           </div>
-        ) : (
+        ) : activeTab === 'vitals' ? (
           <div className="space-y-6">
             {/* Prescriptions Section */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -301,7 +330,111 @@ const PatientDetail = () => {
                </div>
             </div>
           </div>
-        )}
+        ) : activeTab === 'scans' ? (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <BrainCircuit className="w-5 h-5 text-purple-500" /> Longitudinal MRI History
+              </h3>
+              <button 
+                onClick={() => navigate(`/doctor/patient/${id}/mri`)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm"
+              >
+                <Plus className="w-4 h-4" /> New Scan
+              </button>
+            </div>
+            
+            {historyLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 text-purple-600 animate-spin" />
+              </div>
+            ) : mriHistory.items.length === 0 ? (
+              <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-50 rounded-xl">
+                <FileImage className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                <p className="font-medium text-gray-500">No MRI scans on record.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs text-gray-500 uppercase bg-gray-50 rounded-lg">
+                    <tr>
+                      <th className="px-4 py-3 rounded-tl-lg">Date</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Predicted Level</th>
+                      <th className="px-4 py-3">AI Confidence</th>
+                      <th className="px-4 py-3">Model</th>
+                      <th className="px-4 py-3 rounded-tr-lg text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mriHistory.items.map((scan) => (
+                      <tr key={scan.scan_id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                        <td className="px-4 py-4 font-medium text-gray-900 whitespace-nowrap">
+                          {new Date(scan.created_at).toLocaleDateString()} <span className="text-gray-400 text-xs ml-1">{new Date(scan.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                        </td>
+                        <td className="px-4 py-4">
+                          {scan.status === 'completed' ? (
+                            <span className="px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">Completed</span>
+                          ) : scan.status === 'pending' || scan.status === 'processing' ? (
+                            <span className="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-bold capitalize">{scan.status}</span>
+                          ) : (
+                            <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-xs font-bold">Failed</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-4">
+                          {scan.predicted_level ? (
+                            <span className={`px-2 py-1 rounded text-xs font-bold ${scan.predicted_level === 1 ? 'bg-blue-50 text-blue-700' : scan.predicted_level === 2 ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'}`}>
+                              Level {scan.predicted_level}
+                            </span>
+                          ) : <span className="text-gray-400">-</span>}
+                          {scan.predicted_level === 1 ? <div className="text-[10px] text-gray-400 mt-1">Mild Impairment</div> : scan.predicted_level === 2 ? <div className="text-[10px] text-gray-400 mt-1">Moderate Impairment</div> : scan.predicted_level === 3 ? <div className="text-[10px] text-gray-400 mt-1">Severe Impairment</div> : null}
+                        </td>
+                        <td className="px-4 py-4">
+                          {scan.confidence ? (
+                            <span className="font-bold text-gray-700">{Math.round(scan.confidence * 100)}%</span>
+                          ) : <span className="text-gray-400">-</span>}
+                        </td>
+                        <td className="px-4 py-4 text-xs text-gray-400 font-mono">
+                          {scan.model_version || '-'}
+                        </td>
+                        <td className="px-4 py-4 text-right">
+                          <button 
+                            onClick={() => navigate(`/doctor/patient/${id}/mri`)}
+                            className="text-purple-600 hover:text-purple-800 font-semibold text-xs transition-colors"
+                          >
+                            Analyze
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                
+                {mriHistory.pages > 1 && (
+                  <div className="flex items-center justify-between mt-6 px-2">
+                    <span className="text-xs text-gray-500 font-medium tracking-tight">Page {mriHistory.page} of {mriHistory.pages}</span>
+                    <div className="flex gap-2">
+                      <button 
+                        disabled={mriHistory.page <= 1}
+                        onClick={() => fetchMRIHistory(mriHistory.page - 1)}
+                        className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold disabled:opacity-50 hover:bg-gray-50 transition-colors"
+                      >
+                        Previous
+                      </button>
+                      <button 
+                        disabled={mriHistory.page >= mriHistory.pages}
+                        onClick={() => fetchMRIHistory(mriHistory.page + 1)}
+                        className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold disabled:opacity-50 hover:bg-gray-50 transition-colors"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : null}
 
       </div>
     </Layout>

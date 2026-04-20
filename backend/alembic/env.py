@@ -9,9 +9,7 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from app.database.postgres import Base
-# Import your models here if needed, or rely on them being imported elsewhere
-# Since we haven't written the models yet, Base.metadata is currently empty, 
-# but migrations are defined explicitly anyway.
+import app.models  # Ensures all models are registered in Base.metadata
 
 load_dotenv()
 POSTGRES_URL = os.environ.get("POSTGRES_URL", "")

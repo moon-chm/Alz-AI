@@ -11,6 +11,8 @@ class CaretakerDashboard(BaseModel):
     medication_compliance_today: float
     last_saathi_time: Optional[datetime] = None
     last_vitals_time: Optional[datetime] = None
+    primary_doctor_id: Optional[UUID] = None
+    primary_doctor_name: Optional[str] = None
 
 class PatientStatusResponse(BaseModel):
     status: str # 'green' | 'amber' | 'red'
