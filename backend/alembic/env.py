@@ -12,10 +12,10 @@ from app.database.postgres import Base
 import app.models  # Ensures all models are registered in Base.metadata
 
 load_dotenv()
-POSTGRES_URL = os.environ.get("POSTGRES_URL", "")
+database_url = os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL", "")
 
 config = context.config
-config.set_main_option("sqlalchemy.url", POSTGRES_URL)
+config.set_main_option("sqlalchemy.url", database_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
