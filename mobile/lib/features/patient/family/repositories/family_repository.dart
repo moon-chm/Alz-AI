@@ -15,39 +15,28 @@ class FamilyRepository {
   FamilyRepository(this._client);
 
   Future<Either<AppFailure, List<FamilyPhoto>>> fetchPhotos(String patientId) async {
-    // Mocking the photo feed as requested by the user
-    await Future.delayed(const Duration(seconds: 1));
-    
-    final mockPhotos = [
-      FamilyPhoto(
-        photoUrl: 'https://res.cloudinary.com/demo/image/upload/v1652345678/sample_family_1.jpg',
-        senderName: 'Rohan',
-        relationship: 'Son',
-        sentAt: DateTime.now().subtract(const Duration(hours: 2)),
-        narrationText: 'Baba, look at this photo of us from the last picnic. We had so much fun!',
-      ),
-      FamilyPhoto(
-        photoUrl: 'https://res.cloudinary.com/demo/image/upload/v1652345679/sample_family_2.jpg',
-        senderName: 'Priya',
-        relationship: 'Granddaughter',
-        sentAt: DateTime.now().subtract(const Duration(days: 1)),
-        narrationText: 'Aazoba, see my new drawing! I made this for you.',
-      ),
-      FamilyPhoto(
-        photoUrl: 'https://res.cloudinary.com/demo/image/upload/v1652345680/sample_family_3.jpg',
-        senderName: 'Anjali',
-        relationship: 'Daughter-in-law',
-        sentAt: DateTime.now().subtract(const Duration(days: 3)),
-        narrationText: 'Making your favorite Modaks today, Baba. See you in the evening!',
-      ),
-    ];
+    final result = await _client.request<List<dynamic>>(
+      (dio) => dio.get('caretaker/photos', queryParameters: {'patient_id': patientId}),
+    );
 
-    return right(mockPhotos);
+    return result.map((data) {
+      return data.map((json) {
+        // Map backend keys to model keys
+        final mappedJson = {
+          'photoUrl': json['cloudinary_url'],
+          'senderName': json['sender_name'],
+          'relationship': json['relationship'] ?? 'Family Member',
+          'sentAt': json['sent_at'],
+          'narrationText': json['caption'],
+        };
+        return FamilyPhoto.fromJson(mappedJson);
+      }).toList();
+    });
   }
 
   Future<Either<AppFailure, List<FamilyMember>>> fetchMembers(String patientId) async {
     final result = await _client.request<List<dynamic>>(
-      (dio) => dio.get('/family/members', queryParameters: {'patient_id': patientId}),
+      (dio) => dio.get('family/members', queryParameters: {'patient_id': patientId}),
     );
 
     return result.map((data) => data.map((json) => FamilyMember.fromJson(json)).toList());
@@ -60,7 +49,7 @@ class FamilyRepository {
     });
 
     final result = await _client.request<Map<String, dynamic>>(
-      (dio) => dio.post('/family/identify', data: formData),
+      (dio) => dio.post('family/identify', data: formData),
     );
 
     return result.map((data) => FamilyIdentifyResponse.fromJson(data));

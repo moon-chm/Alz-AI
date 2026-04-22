@@ -10,6 +10,33 @@ import uuid
 
 router = APIRouter(tags=["saathi"])
 
+@router.get("/greeting")
+async def get_saathi_greeting(patient_id: str, db: Session = Depends(get_db)):
+    """
+    Generates a localized, warm greeting for the patient.
+    """
+    if not patient_id:
+        raise HTTPException(400, "patient_id is required")
+    try:
+        uuid.UUID(patient_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid patient_id format")
+
+    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    if not patient:
+        raise HTTPException(404, "Patient not found")
+        
+    # Get context (mood, family, etc)
+    system_prompt = await saathi_engine.build_system_prompt(patient_id, patient)
+    
+    # Ask AI for a simple, warm greeting based on the current context and rules
+    user_prompt = f"Give me a single, warm opening greeting for {patient.full_name} in {patient.language}. Keep it under 2 sentences."
+    
+    from app.services import ai_orchestrator
+    ai_result = await ai_orchestrator.generate_response(system_prompt, user_prompt)
+    
+    return {"greeting": ai_result["text"]}
+
 @router.post("/talk", response_model=SAATHITalkResponse)
 async def saathi_talk(
     patient_id: str = Form(...),
@@ -17,6 +44,9 @@ async def saathi_talk(
     db: Session = Depends(get_db)
 ):
     temp_path = None
+    transcribed_text = "Hello" # Fallback
+    detected_mood = "neutral"
+    
     try:
         # 1-2. Save audio to temp file
         ext = os.path.splitext(audio.filename)[1] or ".m4a"
@@ -25,56 +55,62 @@ async def saathi_talk(
             temp_file.write(content)
             temp_path = temp_file.name
 
-        # 3. Transcribe audio
-        transcription = await whisper_service.transcribe_audio(temp_path)
-        transcribed_text = transcription["text"]
+        # 3. Transcribe audio (Resilient)
+        try:
+            transcription = await whisper_service.transcribe_audio(temp_path)
+            transcribed_text = transcription.get("text", "").strip()
+            if not transcribed_text:
+                transcribed_text = "I'm just listening."
+        except Exception as we:
+            logger.error(f"⚠️ SAATHI: Whisper transcription failed: {we}")
+            transcribed_text = "[Audio input failed]"
 
         # 4. Get patient from DB
         patient_db_record = db.query(Patient).filter(Patient.id == patient_id).first()
         if not patient_db_record:
             raise HTTPException(404, "Patient not found")
 
-        # 5. Build system prompt
+        # 5. Build system prompt (Engine already has fallback)
         system_prompt = await saathi_engine.build_system_prompt(patient_id, patient_db_record)
 
-        # 6. Call AI Orchestrator (Ollama with Groq fallback)
+        # 6. Call AI Orchestrator (Now with Redis cache fallback)
         from app.services import ai_orchestrator
-        ai_result = await ai_orchestrator.generate_response(system_prompt, transcribed_text)
+        ai_result = await ai_orchestrator.generate_response(
+            system_prompt, 
+            transcribed_text,
+            patient_id=patient_id
+        )
         ai_response = ai_result["text"]
 
         # 7. Detect Mood
         detected_mood = saathi_engine.detect_mood_from_text(transcribed_text)
 
-        # 8. Determine slow TTS
-        slow_tts = (detected_mood == "agitated")
+        # 8-9. TTS Audio Generation (Resilient)
+        audio_url = ""
+        try:
+            slow_tts = (detected_mood == "agitated")
+            audio_url = await tts_service.text_to_speech(ai_response, patient_db_record.language, slow=slow_tts)
+        except Exception as te:
+            logger.error(f"⚠️ SAATHI: TTS generation failed: {te}")
+            # audio_url remains empty, mobile will use text fallback
 
-        # 9. TTS Audio Generation
-        audio_url = await tts_service.text_to_speech(ai_response, patient_db_record.language, slow=slow_tts)
+        # 10-12. Background updates (Safe — non-blocking to user response)
+        try:
+            memory_service.save_conversation_log(
+                patient_id, 
+                summary=transcribed_text[:100], 
+                mood_detected=detected_mood, 
+                initiated_by="patient"
+            )
+            memory_service.save_mood_log(patient_id, mood=detected_mood, summary=ai_response[:100], detected_by="saathi")
+            await alert_service.publish_to_websocket(patient_id, {
+                "event_type": "mood_updated",
+                "mood": detected_mood,
+                "timestamp": datetime.utcnow().isoformat()
+            })
+        except Exception as be:
+            logger.error(f"⚠️ SAATHI: Background record saving failed: {be}")
 
-        # 10. Save Conversation Log to Neo4j
-        memory_service.save_conversation_log(
-            patient_id, 
-            summary=transcribed_text[:100], 
-            mood_detected=detected_mood, 
-            initiated_by="patient"
-        )
-
-        # 11. Save Mood Log
-        memory_service.save_mood_log(
-            patient_id, 
-            mood=detected_mood, 
-            summary=ai_response[:100], 
-            detected_by="saathi"
-        )
-
-        # 12. Determine if we need to publish mood_updated WebSocket event
-        await alert_service.publish_to_websocket(patient_id, {
-            "event_type": "mood_updated",
-            "mood": detected_mood,
-            "timestamp": datetime.utcnow().isoformat()
-        })
-
-        # 13. Return
         return SAATHITalkResponse(
             text=ai_response,
             audio_url=audio_url,
@@ -82,13 +118,17 @@ async def saathi_talk(
         )
 
     except Exception as e:
-        raise HTTPException(500, f"SAATHI processing error: {e}")
+        logger.error(f"❌ SAATHI: Critical Talk failure: {e}")
+        # Final safety net — never 500
+        return SAATHITalkResponse(
+            text="I'm right here with you. I'm just listening right now. How are you feeling?",
+            audio_url="",
+            mood="neutral"
+        )
     finally:
         if temp_path and os.path.exists(temp_path):
-            try:
-                os.remove(temp_path)
-            except:
-                pass
+            try: os.remove(temp_path)
+            except: pass
 
 
 @router.post("/checkin/morning")

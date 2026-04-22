@@ -13,7 +13,7 @@ class MedicinesRepository {
 
   Future<Either<AppFailure, List<MedicationItem>>> fetchTodayMedications(String patientId) async {
     final result = await _client.request<List<dynamic>>(
-      (dio) => dio.get('/medications', queryParameters: {'patient_id': patientId}),
+      (dio) => dio.get('medications', queryParameters: {'patient_id': patientId}),
     );
 
     return result.map((data) => data.map((json) => MedicationItem.fromJson(json)).toList());
@@ -21,7 +21,7 @@ class MedicinesRepository {
 
   Future<Either<AppFailure, bool>> markTaken(String medicationId, String patientId) async {
     final result = await _client.request<Map<String, dynamic>>(
-      (dio) => dio.post('/medications/taken', data: {
+      (dio) => dio.post('medications/taken', data: {
         'medication_id': medicationId,
         'patient_id': patientId,
       }),
@@ -32,7 +32,7 @@ class MedicinesRepository {
 
   Future<Either<AppFailure, String>> fetchSaathiReminder(String patientId, String medicationId) async {
     final result = await _client.request<Map<String, dynamic>>(
-      (dio) => dio.post('/saathi/checkin/medication', data: {
+      (dio) => dio.post('saathi/checkin/medication', data: {
         'patient_id': patientId,
         'medication_id': medicationId,
       }),
@@ -43,7 +43,7 @@ class MedicinesRepository {
 
   Future<Either<AppFailure, bool>> sendMissedAlert(String patientId, String medicationId) async {
     final result = await _client.request<Map<String, dynamic>>(
-      (dio) => dio.post('/caretaker/alert', data: {
+      (dio) => dio.post('caretaker/alert', data: {
         'patient_id': patientId,
         'alert_type': 'medication_missed',
         'medication_id': medicationId,

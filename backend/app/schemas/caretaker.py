@@ -22,6 +22,15 @@ class PatientStatusResponse(BaseModel):
 class GeofenceSet(BaseModel):
     coordinates: List[Dict[str, float]] # list of {lat, lng}
 
+class VitalsCreate(BaseModel):
+    patient_id: UUID
+    hr: int
+    spo2: int
+    steps: int
+    sleep: float # Hours
+    hrv: Optional[float] = None
+    recorded_at: Optional[datetime] = None
+
 class VitalsResponse(BaseModel):
     hr: int
     spo2: int
@@ -35,6 +44,7 @@ class PhotoResponse(BaseModel):
     cloudinary_url: str
     caption: Optional[str] = None
     sender_name: str
+    relationship: Optional[str] = None
     sent_at: datetime
     
     class Config:

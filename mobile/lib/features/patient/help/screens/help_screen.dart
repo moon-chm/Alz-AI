@@ -1,3 +1,4 @@
+import 'package:alz_ai/features/auth/providers/auth_state.dart';
 import 'package:alz_ai/core/theme/app_theme.dart';
 import 'package:alz_ai/core/providers/language_provider.dart';
 import 'package:alz_ai/features/patient/help/controllers/help_controller.dart';
@@ -20,6 +21,7 @@ class HelpScreen extends ConsumerWidget {
         'calling': 'Calling...',
         'emergency': 'EMERGENCY SOS',
         'identify': 'IDENTIFY PERSON',
+        'logout': 'Log Out',
       },
       'hi': {
         'title': 'मदद लें',
@@ -27,6 +29,7 @@ class HelpScreen extends ConsumerWidget {
         'calling': 'कॉल कर रहे हैं...',
         'emergency': 'आपातकालीन SOS',
         'identify': 'व्यक्ति को पहचानें',
+        'logout': 'लॉग आउट',
       },
       'mr': {
         'title': 'मदत मिळवा',
@@ -34,6 +37,7 @@ class HelpScreen extends ConsumerWidget {
         'calling': 'कॉल करत आहे...',
         'emergency': 'आणीबाणी SOS',
         'identify': 'व्यक्ती ओळखा',
+        'logout': 'लॉग आउट',
       },
     }[lang] ?? {
       'en': {
@@ -42,6 +46,7 @@ class HelpScreen extends ConsumerWidget {
         'calling': 'Calling...',
         'emergency': 'EMERGENCY SOS',
         'identify': 'IDENTIFY PERSON',
+        'logout': 'Log Out',
       }
     }['en']!;
 
@@ -84,7 +89,47 @@ class HelpScreen extends ConsumerWidget {
               child: Center(child: Text(failure.message, style: const TextStyle(color: AppTheme.errorColor))),
             ),
           },
+          SliverPadding(
+            padding: const EdgeInsets.all(24),
+            sliver: SliverToBoxAdapter(
+              child: OutlinedButton.icon(
+                onPressed: () => _showLogoutDialog(context, ref, labels),
+                icon: const Icon(Icons.logout, color: AppTheme.errorColor),
+                label: Text(
+                  labels['logout']!,
+                  style: const TextStyle(color: AppTheme.errorColor, fontWeight: FontWeight.bold),
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.all(16),
+                  side: const BorderSide(color: AppTheme.errorColor),
+                ),
+              ),
+            ),
+          ),
           const SliverToBoxAdapter(child: SizedBox(height: 40)),
+        ],
+      ),
+    );
+  }
+
+  void _showLogoutDialog(BuildContext context, WidgetRef ref, Map<String, String> labels) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(labels['logout']!),
+        content: const Text('Are you sure you want to log out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ref.read(authStateProvider.notifier).logout();
+            },
+            child: Text(labels['logout']!, style: const TextStyle(color: AppTheme.errorColor)),
+          ),
         ],
       ),
     );

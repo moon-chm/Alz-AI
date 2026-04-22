@@ -71,5 +71,10 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
 
+async def get_current_token_payload(token: str = Depends(oauth2_scheme)) -> dict:
+    if not token:
+        return {}
+    return decode_token(token)
+
 
 # Guards moved to app.core.access_control

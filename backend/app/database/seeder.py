@@ -78,6 +78,26 @@ def seed_postgres(db: Session):
             verified_at=datetime.utcnow()
         )
         db.add(link)
+
+        # 5. Seed Medications
+        from app.models.medication import Medication
+        meds = [
+            Medication(
+                patient_id=patient.id,
+                name="Donepezil",
+                dosage="10mg",
+                scheduled_times=["08:00"],
+                created_by=caretaker.id
+            ),
+            Medication(
+                patient_id=patient.id,
+                name="Memantine",
+                dosage="5mg",
+                scheduled_times=["08:00", "20:00"],
+                created_by=caretaker.id
+            )
+        ]
+        db.add_all(meds)
         
         db.commit()
         logger.info("[SEED] Postgres complete.")

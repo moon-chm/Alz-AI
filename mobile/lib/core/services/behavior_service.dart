@@ -16,7 +16,7 @@ class BehaviorService {
     if (patientId == null) return null;
 
     final result = await _client.request<Map<String, dynamic>>(
-      (dio) => dio.get('/caretaker/behavior', queryParameters: {'patient_id': patientId}),
+      (dio) => dio.get('caretaker/behavior', queryParameters: {'patient_id': patientId}),
     );
 
     return result.match(

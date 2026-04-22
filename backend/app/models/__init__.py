@@ -7,11 +7,13 @@ from app.models.alert import Alert
 from app.models.audit_log import AuditLog, AuditAnomaly
 from app.models.photo import Photo
 from app.models.adherence_log import AdherenceLog
+from app.models.vitals import Vitals
+from app.models.location import LocationLog
 from app.models.mri import PatientMRIScan, PatientMRIAnalysis, PatientSeverityHistory
 
 __all__ = [
     "Base", "User", "Patient", "CaretakerPatient",
     "Medication", "Appointment", "Alert",
-    "AuditLog", "AuditAnomaly", "Photo", "AdherenceLog",
+    "AuditLog", "AuditAnomaly", "Photo", "AdherenceLog", "Vitals", "LocationLog",
     "PatientMRIScan", "PatientMRIAnalysis", "PatientSeverityHistory"
 ]

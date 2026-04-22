@@ -15,7 +15,7 @@ class VitalsRepository {
   /// Maps to POST /api/caretaker/vitals
   Future<Either<AppFailure, bool>> syncVitals(String patientId, VitalsReading reading) async {
     final result = await _client.request<Map<String, dynamic>>(
-      (dio) => dio.post('/caretaker/vitals', data: {
+      (dio) => dio.post('caretaker/vitals', data: {
         'patient_id': patientId,
         ...reading.toJson(),
       }),
@@ -28,7 +28,7 @@ class VitalsRepository {
   /// Maps to GET /api/caretaker/vitals
   Future<Either<AppFailure, VitalsReading>> fetchLatestVitals(String patientId) async {
     final result = await _client.request<Map<String, dynamic>>(
-      (dio) => dio.get('/caretaker/vitals', queryParameters: {'patient_id': patientId}),
+      (dio) => dio.get('caretaker/vitals', queryParameters: {'patient_id': patientId}),
     );
 
     return result.map((data) => VitalsReading.fromJson(data));
