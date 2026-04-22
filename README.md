@@ -14,6 +14,14 @@
 
 ---
 
+## 🛡️ Security Hardened
+This repository has undergone a comprehensive security audit for public release:
+- **Zero-Secret Policy**: All credentials, database URLs, and API keys have been removed from the source code and moved to environment variables.
+- **Credential Rotation**: All production-grade secrets (JWT, Groq, Twilio) have been rotated.
+- **Local Auditing**: Includes a pre-push secret scanner (`audit_secrets.bat`) for developers to prevent accidental leaks.
+
+---
+
 ## ✨ System Architecture 
 
 Built for modern scalability and resilient performance:
@@ -35,12 +43,16 @@ git clone https://github.com/moon-chm/Alz-AI.git
 cd alz-ai
 
 # Step 2 — Environment Setup
+# Copy the template and fill in your keys
 cp .env.example .env
-nano .env # Fill in your required keys
 
 # Step 3 — Build and Start Services
-docker-compose up --build
+docker-compose up --build -d
 ```
+
+### 🛠️ Developer Features
+- **Auto-Activation**: For streamlined testing, `DOCTOR_AUTO_ACTIVATE=true` is enabled in the default configuration. New doctor accounts are immediately active upon registration.
+- **Real OTP Testing**: Set `OTP_MODE=REAL` in your `.env` to test real Twilio SMS delivery, or leave it as `MOCK` to use `123456` as a fixed test code.
 
 ### 📋 Live Services Overview:
 - **Backend API**: `http://localhost:8000`
