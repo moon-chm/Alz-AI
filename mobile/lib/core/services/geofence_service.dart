@@ -1,14 +1,15 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
+import 'package:dio/dio.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:alz_ai/features/patient/background/models/background_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class GeofenceService {
-  static const String _latKey = 'geofence_lat';
-  static const String _lngKey = 'geofence_lng';
-  static const String _radiusKey = 'geofence_radius';
+  static const String _geofenceCoordsKey = 'geofence_coords';
   
+  final Dio? _dio;
   final _eventController = StreamController<BackgroundEvent>.broadcast();
   Stream<BackgroundEvent> get events => _eventController.stream;
 
@@ -16,73 +17,101 @@ class GeofenceService {
   Timer? _boundaryTimer;
   bool _isBreached = false;
 
-  GeofenceService() {
+  GeofenceService([this._dio]) {
     _fetchBoundaries();
     _startPolling();
     _boundaryTimer = Timer.periodic(const Duration(hours: 6), (_) => _fetchBoundaries());
   }
 
   Future<void> _fetchBoundaries() async {
-    // This logic would normally hit GET /api/caretaker/geofence
-    // For now we assume a mechanism to hit the API or use a repo
+    if (_dio == null) return;
+    
+    try {
+      final response = await _dio!.get('patient/geofence');
+      if (response.statusCode == 200 && response.data['status'] == 'success') {
+        final List<dynamic> coords = response.data['coordinates'];
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_geofenceCoordsKey, jsonEncode(coords));
+      }
+    } catch (e) {
+      // Use cached boundaries if fetch fails
+    }
   }
 
   void _startPolling() {
     _pollingTimer?.cancel();
+    // Higher safety check frequency when breached or nearby, 
+    // but default for Alzheimer's is to keep it consistent
     final interval = _isBreached ? const Duration(seconds: 60) : const Duration(minutes: 3);
     _pollingTimer = Timer.periodic(interval, (_) => _checkGeofence());
   }
 
   Future<void> _checkGeofence() async {
     final prefs = await SharedPreferences.getInstance();
-    final centerLat = prefs.getDouble(_latKey);
-    final centerLng = prefs.getDouble(_lngKey);
-    final radius = prefs.getDouble(_radiusKey);
-
-    if (centerLat == null || centerLng == null || radius == null) return;
+    final coordsRaw = prefs.getString(_geofenceCoordsKey);
+    if (coordsRaw == null) return;
 
     try {
+      final List<dynamic> polygon = jsonDecode(coordsRaw);
+      if (polygon.length < 3) return;
+
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
       );
 
-      final distance = _calculateDistance(
+      final isSafe = _isPointInPolygon(
         position.latitude,
         position.longitude,
-        centerLat,
-        centerLng,
+        polygon,
       );
 
-      if (distance > radius && !_isBreached) {
+      if (!isSafe && !_isBreached) {
         _isBreached = true;
         _eventController.add(BackgroundEvent.geofenceBreached(
           latitude: position.latitude,
           longitude: position.longitude,
           timestamp: DateTime.now().toIso8601String(),
         ));
-        _startPolling(); // Speed up polling
-      } else if (distance <= radius && _isBreached) {
+        _startPolling(); // Faster checks when outside
+      } else if (isSafe && _isBreached) {
         _isBreached = false;
         _eventController.add(BackgroundEvent.geofenceRestored(
           timestamp: DateTime.now().toIso8601String(),
         ));
-        _startPolling(); // Back to normal polling
+        _startPolling(); // Normal checks when back inside
       }
     } catch (e) {
       // Ignore GPS errors
     }
   }
 
-  double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-    const p = 0.017453292519943295; // Math.PI / 180
-    final a = 0.5 - cos((lat2 - lat1) * p) / 2 + 
-          cos(lat1 * p) * cos(lat2 * p) * 
-          (1 - cos((lon2 - lon1) * p)) / 2;
-    return 12742 * asin(sqrt(a)) * 1000; // 2 * R; R = 6371 km to meters
+  bool _isPointInPolygon(double lat, double lng, List<dynamic> polygon) {
+    bool isInside = false;
+    final int n = polygon.length;
+    var p1 = polygon[0];
+    
+    for (int i = 1; i <= n; i++) {
+      var p2 = polygon[i % n];
+      if (lng > min(p1['lng'], p2['lng'])) {
+        if (lng <= max(p1['lng'], p2['lng'])) {
+          if (lat <= max(p1['lat'], p2['lat'])) {
+            if (p1['lng'] != p2['lng']) {
+              double xInters = (lng - p1['lng']) * (p2['lat'] - p1['lat']) / (p2['lng'] - p1['lng']) + p1['lat'];
+              if (p1['lat'] == p2['lat'] || lat <= xInters) {
+                isInside = !isInside;
+              }
+            }
+          }
+        }
+      }
+      p1 = p2;
+    }
+    return isInside;
   }
 
   void dispose() {
     _pollingTimer?.cancel();
+    _boundaryTimer?.cancel();
     _eventController.close();
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:alz_ai/features/auth/controllers/login_controller.dart';
 import 'package:alz_ai/features/auth/controllers/login_state.dart';
+import 'package:alz_ai/core/providers/language_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -11,13 +12,13 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final _phoneController = TextEditingController();
+  final _idController = TextEditingController();
   final _otpController = TextEditingController();
   static const String _authRole = 'patient';
 
   @override
   void dispose() {
-    _phoneController.dispose();
+    _idController.dispose();
     _otpController.dispose();
     super.dispose();
   }
@@ -25,6 +26,54 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(loginControllerProvider);
+    final lang = ref.watch(languageProvider);
+
+    final labels = {
+      'en': {
+        'title': 'Welcome to ALZ-AI',
+        'subtitle': 'Secure authentication for your safety',
+        'id_label': 'Patient ID',
+        'id_hint': 'Enter your Patient ID (e.g. ALZ-2024-001)',
+        'request_otp': 'Request OTP',
+        'otp_sent': 'Entering OTP sent to ID: ',
+        'otp_label': 'OTP Code',
+        'otp_hint': '123456',
+        'verify_login': 'Verify & Login',
+        'change_id': 'Change Patient ID',
+      },
+      'hi': {
+        'title': 'ALZ-AI में आपका स्वागत है',
+        'subtitle': 'आपकी सुरक्षा के लिए सुरक्षित प्रमाणीकरण',
+        'id_label': 'पेशेंट ID',
+        'id_hint': 'Apna Patient ID dalein.',
+        'request_otp': 'OTP मंगवाएं',
+        'otp_sent': 'ID पर भेजा गया OTP डालें: ',
+        'otp_label': 'OTP कोड',
+        'otp_hint': '123456',
+        'verify_login': 'सत्यापित करें और लॉगिन करें',
+        'change_id': 'पेशेंट ID बदलें',
+      },
+      'mr': {
+        'title': 'ALZ-AI मध्ये आपले स्वागत आहे',
+        'subtitle': 'तुमच्या सुरक्षिततेसाठी सुरक्षित प्रमाणीकरण',
+        'id_label': 'पेशंट ID',
+        'id_hint': 'Tumcha Patient ID ghala.',
+        'request_otp': 'OTP मागवा',
+        'otp_sent': 'ID वर पाठवलेला OTP प्रविष्ट करा: ',
+        'otp_label': 'OTP कोड',
+        'otp_hint': '123456',
+        'verify_login': 'सत्यापित करा आणि लॉगिन करा',
+        'change_id': 'पेशंट ID बदला',
+      },
+    }[lang] ?? {
+      'en': {
+        'title': 'Welcome to ALZ-AI',
+        'subtitle': 'Secure authentication for your safety',
+        'id_label': 'Patient ID',
+        'id_hint': 'Enter your Patient ID',
+        'request_otp': 'Request OTP',
+      }
+    }['en']!;
 
     return Scaffold(
       body: Container(
@@ -42,16 +91,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 40),
-                _buildHeader(),
+                _buildHeader(labels['title']!, labels['subtitle']!),
                 const SizedBox(height: 48),
                 Expanded(
                   child: SingleChildScrollView(
                     child: state.maybeWhen(
-                      otpSent: () => _buildOtpView(),
+                      otpSent: () => _buildOtpView(labels),
                       verifyingOtp: () => _buildLoadingView('Verifying OTP...'),
                       requestingOtp: () => _buildLoadingView('Requesting OTP...'),
                       success: () => _buildSuccessView(),
-                      orElse: () => _buildPhoneView(),
+                      orElse: () => _buildIdView(labels),
                     ),
                   ),
                 ),
@@ -65,7 +114,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(String title, String subtitle) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -79,9 +128,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           child: const Icon(Icons.security_rounded, color: Color(0xFF00C8FF), size: 32),
         ),
         const SizedBox(height: 24),
-        const Text(
-          'Welcome to ALZ-AI',
-          style: TextStyle(
+        Text(
+          title,
+          style: const TextStyle(
             color: Colors.white,
             fontSize: 32,
             fontWeight: FontWeight.bold,
@@ -90,7 +139,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Secure authentication for your safety',
+          subtitle,
           style: TextStyle(
             color: Colors.white.withOpacity(0.5),
             fontSize: 16,
@@ -100,25 +149,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  Widget _buildPhoneView() {
+  Widget _buildIdView(Map<String, String> labels) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 12),
         const SizedBox(height: 32),
         _textField(
-          controller: _phoneController,
-          label: 'Phone Number',
-          hint: '+91 98765 43210',
-          icon: Icons.phone_android_rounded,
-          keyboardType: TextInputType.phone,
+          controller: _idController,
+          label: labels['id_label']!,
+          hint: labels['id_hint']!,
+          icon: Icons.badge_outlined,
+          keyboardType: TextInputType.text,
         ),
         const SizedBox(height: 40),
         _actionButton(
-          label: 'Request OTP',
+          label: labels['request_otp']!,
           onPressed: () {
             ref.read(loginControllerProvider.notifier).requestOtp(
-              _phoneController.text,
+              _idController.text,
               _authRole,
             );
           },
@@ -127,28 +176,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  Widget _buildOtpView() {
+  Widget _buildOtpView(Map<String, String> labels) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Entering OTP sent to ${_phoneController.text}',
+          '${labels['otp_sent']}${_idController.text}',
           style: const TextStyle(color: Colors.white70),
         ),
         const SizedBox(height: 32),
         _textField(
           controller: _otpController,
-          label: 'OTP Code',
-          hint: '123456',
+          label: labels['otp_label']!,
+          hint: labels['otp_hint']!,
           icon: Icons.lock_clock_rounded,
           keyboardType: TextInputType.number,
         ),
         const SizedBox(height: 40),
         _actionButton(
-          label: 'Verify & Login',
+          label: labels['verify_login']!,
           onPressed: () {
             ref.read(loginControllerProvider.notifier).verifyOtp(
-              _phoneController.text,
+              _idController.text,
               _otpController.text,
               _authRole,
             );
@@ -156,7 +205,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ),
         TextButton(
           onPressed: () => ref.read(loginControllerProvider.notifier).reset(),
-          child: const Text('Change Phone Number', style: TextStyle(color: Color(0xFF00C8FF))),
+          child: Text(labels['change_id']!, style: const TextStyle(color: Color(0xFF00C8FF))),
         ),
       ],
     );

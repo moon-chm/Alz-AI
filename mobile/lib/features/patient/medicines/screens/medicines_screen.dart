@@ -85,74 +85,97 @@ class _MedicationCard extends ConsumerWidget {
       label: 'Medication: ${med.name}, at ${med.time}. Status: ${med.status}',
       child: Card(
         margin: const EdgeInsets.only(bottom: 16),
-        child: ListTile(
-          contentPadding: const EdgeInsets.all(16),
-          leading: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: CachedNetworkImage(
-              imageUrl: med.photoUrl,
-              width: 60,
-              height: 60,
-              fit: BoxFit.cover,
-              placeholder: (context, url) => const SkeletonLoader(width: 60, height: 60),
-              errorWidget: (context, url, error) => Container(
-                width: 60,
-                height: 60,
-                color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                child: const Icon(Icons.medication, color: AppTheme.primaryColor),
-              ),
-            ),
-          ),
-          title: Text(
-            med.name,
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          subtitle: Column(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 4),
-              Text(
-                scheduledTime != null ? timeFormat.format(scheduledTime) : med.time,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: AppTheme.textSecondary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                med.doseInstructions,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ],
-          ),
-          trailing: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: statusColor.withValues(alpha: 0.3)),
-                ),
-                child: Text(
-                  med.status.toUpperCase(),
-                  style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold),
-                ),
-              ),
-              if (med.status == 'upcoming')
-                Semantics(
-                  button: true,
-                  label: 'Mark as taken',
-                  child: SizedBox(
-                    width: 56,
-                    height: 56,
-                    child: IconButton(
-                      icon: const Icon(Icons.check_circle, color: AppTheme.successColor, size: 32),
-                      onPressed: () => ref.read(medicinesProvider.notifier).markAsTaken(med.id),
-                    ),
+              // Leading Image
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: CachedNetworkImage(
+                  imageUrl: med.photoUrl,
+                  width: 60,
+                  height: 60,
+                  fit: BoxFit.cover,
+                  placeholder: (context, url) => const SkeletonLoader(width: 60, height: 60),
+                  errorWidget: (context, url, error) => Container(
+                    width: 60,
+                    height: 60,
+                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                    child: const Icon(Icons.medication, color: AppTheme.primaryColor),
                   ),
                 ),
+              ),
+              const SizedBox(width: 16),
+              
+              // Text Content - Expanded to prevent overflow and mid-word breaks
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      med.name,
+                      style: Theme.of(context).textTheme.titleLarge,
+                      softWrap: true,
+                      overflow: TextOverflow.visible,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      scheduledTime != null ? timeFormat.format(scheduledTime) : med.time,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      med.doseInstructions,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                      softWrap: true,
+                    ),
+                  ],
+                ),
+              ),
+              
+              const SizedBox(width: 8),
+              
+              // Trailing Actions - Column with spacing to prevent overlap
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                    ),
+                    child: Text(
+                      med.status.toUpperCase(),
+                      style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  if (med.status == 'upcoming') ...[
+                    const SizedBox(height: 12),
+                    Semantics(
+                      button: true,
+                      label: 'Mark as taken',
+                      child: SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.check_circle, color: AppTheme.successColor, size: 40),
+                          onPressed: () => ref.read(medicinesProvider.notifier).markAsTaken(med.id),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ],
           ),
         ),

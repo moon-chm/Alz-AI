@@ -305,6 +305,9 @@ async def request_otp(data: UnifiedOTPRequest, db: Session = Depends(get_db)):
             data={"recipient_preview": f"******{phone[-4:]}"},
             message="OTP sent successfully"
         )
+    except ValueError as e:
+        # Graceful handling for rate limits (too many requests)
+        raise HTTPException(status_code=429, detail=str(e))
     except Exception as e:
         if is_dev:
             return success_response(
@@ -364,7 +367,14 @@ async def login_otp(data: UnifiedLoginRequest, response: Response, db: Session =
         raise HTTPException(404, "No linked caretaker found for this patient")
 
     # 3. Create tokens
-    access_token = create_access_token(data={"sub": str(user_to_auth.id), "role": user_to_auth.role.value, "email": user_to_auth.email})
+    # Ensure role is 'patient' for patient logins, otherwise use user's database role
+    effective_role = "patient" if data.role == "patient" else user_to_auth.role.value
+    
+    jwt_payload = {"sub": str(user_to_auth.id), "role": effective_role, "email": user_to_auth.email}
+    if patient_id_out:
+        jwt_payload["patient_id"] = patient_id_out
+        
+    access_token = create_access_token(data=jwt_payload)
     refresh_token = create_refresh_token(data={"sub": str(user_to_auth.id)})
     
     return success_response(
@@ -372,7 +382,7 @@ async def login_otp(data: UnifiedLoginRequest, response: Response, db: Session =
             "access_token": access_token,
             "refresh_token": refresh_token,
             "token_type": "bearer",
-            "role": user_to_auth.role.value,
+            "role": effective_role,
             "user_id": str(user_to_auth.id),
             "patient_id": patient_id_out,
             "is_mock": is_mock,

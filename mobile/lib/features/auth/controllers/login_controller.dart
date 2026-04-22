@@ -1,9 +1,11 @@
 import 'package:alz_ai/features/auth/controllers/login_state.dart';
 import 'package:alz_ai/features/auth/providers/auth_state.dart';
 import 'package:alz_ai/features/auth/auth_repository.dart';
+import 'package:alz_ai/core/storage/storage_service.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:alz_ai/core/services/background_service.dart';
+import 'package:alz_ai/core/services/vitals_service.dart';
 
 part 'login_controller.g.dart';
 
@@ -12,11 +14,11 @@ class LoginController extends _$LoginController {
   @override
   LoginState build() => const LoginState.idling();
 
-  Future<void> requestOtp(String phone, String role) async {
+  Future<void> requestOtp(String identifier, String role) async {
     state = const LoginState.requestingOtp();
     
     final result = await ref.read(authRepositoryProvider).requestOtp(
-      phone: phone,
+      identifier: identifier,
       role: role,
     );
 
@@ -26,31 +28,53 @@ class LoginController extends _$LoginController {
     );
   }
 
-  Future<void> verifyOtp(String phone, String otp, String role) async {
+  Future<void> verifyOtp(String identifier, String otp, String role) async {
     state = const LoginState.verifyingOtp();
     
     final result = await ref.read(authRepositoryProvider).verifyOtp(
-      phone: phone,
+      identifier: identifier,
       otp: otp,
       role: role,
     );
 
     result.fold(
       (failure) => state = LoginState.failure(failure.message),
-      (authResponse) {
+      (authResponse) async {
+        // Ensure all storage writes are flushed before proceeding
+        // Note: Repository already awaits, but we add a safety sync read if needed
+        final savedId = await ref.read(storageServiceProvider).getPatientId();
+        
         state = const LoginState.success();
         
-        // Request Notification Permission (Controlled moment post-OTP)
-        // We do not block navigation if denied, but we call it here to trigger the system dialog
-        Permission.notification.request().then((_) {
-           // Initialize background services after permission choice
-           BackgroundServiceInstance.initialize();
-        });
+        // Sequential Permission Handshake
+        // 1. Notification
+        await Permission.notification.request();
+        
+        // 2. Location (Foreground then Background as required by Android 11+)
+        final locStatus = await Permission.location.request();
+        bool hasLoc = locStatus.isGranted;
+        if (hasLoc) {
+          final backgroundStatus = await Permission.locationAlways.request();
+          hasLoc = backgroundStatus.isGranted;
+        }
 
-        // Update the global auth state
+        // 3. Health
+        final vitalsService = VitalsService();
+        bool hasHealth = false;
+        if (await vitalsService.checkAvailability()) {
+          hasHealth = await vitalsService.requestPermissions();
+        }
+
+        // Initialize background services with REAL permission status
+        await BackgroundServiceInstance.initialize(
+          hasHealthPermissions: hasHealth,
+          hasLocationPermissions: hasLoc,
+        );
+
+        // Update the global auth state only AFTER persistence is confirmed
         ref.read(authStateProvider.notifier).setAuthenticated(
           role: authResponse.role,
-          level: null, // Level can be updated after fetching detailed profile
+          level: null,
         );
       },
     );

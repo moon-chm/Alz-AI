@@ -9,12 +9,14 @@ from app.models.alert import Alert
 from app.models.medication import Medication
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.photo import Photo
-from app.schemas.caretaker import CaretakerDashboard, PatientStatusResponse, GeofenceSet, VitalsResponse, PhotoResponse, AppointmentCreate, AppointmentResponse, WellnessInsightsResponse
+from app.models.vitals import Vitals
+from app.schemas.caretaker import CaretakerDashboard, PatientStatusResponse, GeofenceSet, VitalsResponse, VitalsCreate, PhotoResponse, AppointmentCreate, AppointmentResponse, WellnessInsightsResponse
 from app.schemas.medication import MedicationCreate, MedicationUpdate, MedicationResponse
 from app.utils.jwt import get_current_user
 from app.core.access_control import require_caretaker
 from app.services import memory_service, cloudinary_service, pdf_service, alert_service, insights_service
 from app.services.teleconsult_service import teleconsult_provider
+from app.utils.geofence_utils import is_point_in_polygon
 import redis
 import json
 from datetime import datetime
@@ -59,15 +61,26 @@ async def get_dashboard(current_user: User = Depends(require_caretaker), db: Ses
     elif mood in ["confused"] or any(a.severity == 3 for a in alerts):
         status = "amber"
         
-    saathi_time = datetime.utcnow() # Mock
-    vitals_time = datetime.utcnow() # Mock
+    # Real-time pulse recovery
+    saathi_time = datetime.utcnow()
+    vitals_time = datetime.utcnow()
     
+    if r:
+        vitals_raw = r.get(f"vitals:{patient.id}")
+        if vitals_raw:
+            v_data = json.loads(vitals_raw)
+            vitals_time = datetime.fromisoformat(v_data["recorded_at"])
+        
+        saathi_raw = r.get(f"saathi:last_res:{patient.id}")
+        # If we have a last response, we can use its timestamp if we stored one, 
+        # for now we'll just show current if active.
+
     return CaretakerDashboard(
         patient_status=status,
         patient_name=patient.full_name,
         patient_id=str(patient.id),
         recent_alerts=[{"id": str(a.id), "message": a.message, "severity": a.severity, "created_at": a.created_at.isoformat()} for a in alerts],
-        medication_compliance_today=85.5, # Mock
+        medication_compliance_today=85.5, # Mock for now
         last_saathi_time=saathi_time,
         last_vitals_time=vitals_time,
         primary_doctor_id=patient.doctor_id,
@@ -119,28 +132,119 @@ async def set_geofence(data: GeofenceSet, current_user: User = Depends(require_c
         
     return {"status": "success", "message": "Geofence updated"}
 
-@router.get("/vitals", response_model=VitalsResponse)
-async def get_vitals(current_user: User = Depends(require_caretaker), db: Session = Depends(get_db)):
-    link = db.query(CaretakerPatient).filter(CaretakerPatient.caretaker_id == current_user.id).first()
-    if not link:
-        raise HTTPException(404, "No patient linked")
-        
-    # Mocking Redis vitals
-    # Broadcast update to other listeners
-    await alert_service.publish_to_websocket(str(link.patient_id), {
+@router.post("/vitals")
+async def record_vitals(data: VitalsCreate, db: Session = Depends(get_db)):
+    # Authenticate/Check permission (In production, ensure requester is authorized for patient_id)
+    # For now, we trust the background service token
+    
+    new_vitals = Vitals(
+        patient_id=data.patient_id,
+        hr=data.hr,
+        spo2=data.spo2,
+        steps=data.steps,
+        sleep=data.sleep,
+        hrv=data.hrv,
+        recorded_at=data.recorded_at or datetime.utcnow()
+    )
+    db.add(new_vitals)
+    db.commit()
+    db.refresh(new_vitals)
+
+    # Update Redis for real-time dashboard
+    if r:
+        redis_data = {
+            "hr": data.hr,
+            "spo2": data.spo2,
+            "steps": data.steps,
+            "sleep": data.sleep,
+            "hrv": data.hrv,
+            "recorded_at": new_vitals.recorded_at.isoformat()
+        }
+        r.set(f"vitals:{data.patient_id}", json.dumps(redis_data), ex=600) # 10 min TTL
+
+    # Broadcast update to websocket
+    await alert_service.publish_to_websocket(str(data.patient_id), {
         "event_type": "vitals_updated",
-        "hr": 72,
-        "spo2": 98,
-        "recorded_at": datetime.utcnow().isoformat()
+        **(redis_data if r else {
+            "hr": data.hr,
+            "spo2": data.spo2,
+            "recorded_at": new_vitals.recorded_at.isoformat()
+        })
     })
 
+    return {"status": "success", "id": str(new_vitals.id)}
+
+@router.get("/vitals", response_model=VitalsResponse)
+async def get_vitals(
+    patient_id: uuid.UUID = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Fallback: query param or current user's link
+    if not patient_id:
+        link = db.query(CaretakerPatient).filter(CaretakerPatient.caretaker_id == current_user.id).first()
+        if not link:
+            raise HTTPException(404, "No linked patient found")
+        patient_id = link.patient_id
+    
+    p_id_str = str(patient_id)
+    
+    # 1. Try Redis
+    if r:
+        raw = r.get(f"vitals:{p_id_str}")
+        if raw:
+            data = json.loads(raw)
+            return VitalsResponse(**data)
+            
+    # 2. Fallback to Postgres
+    latest = db.query(Vitals).filter(Vitals.patient_id == patient_id).order_by(Vitals.recorded_at.desc()).first()
+    if not latest:
+        return VitalsResponse(
+            hr=0, spo2=0, steps=0, sleep=0, recorded_at=datetime.utcnow()
+        )
+
     return VitalsResponse(
-        hr=72,
-        spo2=98,
-        steps=3200,
-        sleep=6.5,
-        recorded_at=datetime.utcnow()
+        hr=latest.hr,
+        spo2=latest.spo2,
+        steps=latest.steps,
+        sleep=latest.sleep,
+        hrv=latest.hrv,
+        recorded_at=latest.recorded_at
     )
+
+@router.get("/contacts")
+async def get_contacts(
+    patient_id: uuid.UUID = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Fallback to query param
+    if not patient_id:
+        if current_user.role == "patient":
+            # Finding patient ID from link if not provided
+            link = db.query(CaretakerPatient).filter(CaretakerPatient.patient_id == current_user.id).first()
+            if link: patient_id = link.patient_id
+            
+    if not patient_id:
+         raise HTTPException(400, "patient_id required")
+
+    links = db.query(CaretakerPatient).filter(
+        CaretakerPatient.patient_id == patient_id,
+        CaretakerPatient.link_status == "active"
+    ).all()
+    
+    contacts = []
+    for link in links:
+        caretaker = db.query(User).filter(User.id == link.caretaker_id).first()
+        if caretaker:
+            contacts.append({
+                "id": str(caretaker.id),
+                "name": caretaker.full_name or "Caretaker",
+                "relationship": link.relationship or "Primary",
+                "phone": caretaker.phone or "",
+                "is_primary": link.is_primary or False
+            })
+    return contacts
 
 @router.get("/location")
 async def get_location(current_user: User = Depends(require_caretaker), db: Session = Depends(get_db)):
@@ -148,22 +252,52 @@ async def get_location(current_user: User = Depends(require_caretaker), db: Sess
     if not link:
         raise HTTPException(404, "No patient linked")
     
-    # Try fetching from Redis first
+    # Try fetching from Redis first (patient:loc: key used by patient pulse)
     location_data = None
     if r:
-        raw = r.get(f"location:{link.patient_id}")
+        raw = r.get(f"patient:loc:{link.patient_id}")
         if raw:
             location_data = json.loads(raw)
+            # Re-verify geofence status in case fence changed since last update
+            geofence_raw = r.get(f"geofence:{link.patient_id}")
+            if geofence_raw:
+                polygon = json.loads(geofence_raw)
+                is_safe = is_point_in_polygon(location_data["lat"], location_data["lng"], polygon)
+                location_data["geofence_status"] = "inside" if is_safe else "outside"
+                location_data["status"] = location_data["geofence_status"]
+            else:
+                location_data["geofence_status"] = "safe"
     
-    # Fallback to realistic mock if no Redis data
     if not location_data:
-        location_data = {
-            "lat": 28.6139, 
-            "lng": 77.2090, 
-            "status": "safe",
-            "geofence_status": "inside",
-            "timestamp": datetime.utcnow().isoformat()
-        }
+        # Fallback to last known position from Postgres history
+        from app.models.location import LocationLog
+        latest = db.query(LocationLog).filter(LocationLog.patient_id == link.patient_id).order_by(LocationLog.timestamp.desc()).first()
+        if latest:
+            # Check geofence for historical fallback too
+            geofence_status = "safe"
+            if r:
+                geofence_raw = r.get(f"geofence:{link.patient_id}")
+                if geofence_raw:
+                    polygon = json.loads(geofence_raw)
+                    geofence_status = "inside" if is_point_in_polygon(latest.latitude, latest.longitude, polygon) else "outside"
+
+            location_data = {
+                "lat": latest.latitude,
+                "lng": latest.longitude,
+                "accuracy": latest.accuracy,
+                "status": geofence_status,
+                "geofence_status": geofence_status,
+                "timestamp": latest.timestamp.isoformat()
+            }
+        else:
+            # Final fallback to realistic static for dev
+            location_data = {
+                "lat": 28.6139, 
+                "lng": 77.2090, 
+                "status": "waiting",
+                "geofence_status": "waiting",
+                "timestamp": datetime.utcnow().isoformat()
+            }
     
     # Broadcast update to other listeners
     await alert_service.publish_to_websocket(str(link.patient_id), {
@@ -289,14 +423,22 @@ async def get_photos(current_user: User = Depends(require_caretaker), db: Sessio
         
     photos = db.query(Photo).filter(Photo.patient_id == link.patient_id).order_by(Photo.sent_at.desc()).all()
     
-    # Enrich with sender name
+    # Enrich with sender name and relationship
     results = []
     for p in photos:
+        # Fetch relationship between sender and patient
+        rel_link = db.query(CaretakerPatient).filter(
+            CaretakerPatient.caretaker_id == p.sender_id,
+            CaretakerPatient.patient_id == p.patient_id
+        ).first()
+        relationship = rel_link.relationship if rel_link else "Family Member"
+
         p_dict = {
             "id": p.id,
             "cloudinary_url": p.cloudinary_url,
             "caption": p.caption,
             "sender_name": p.sender.full_name if p.sender else "Caretaker",
+            "relationship": relationship,
             "sent_at": p.sent_at
         }
         results.append(p_dict)

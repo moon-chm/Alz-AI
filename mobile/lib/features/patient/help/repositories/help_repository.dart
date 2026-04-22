@@ -13,7 +13,7 @@ class HelpRepository {
 
   Future<Either<AppFailure, List<ContactItem>>> fetchContacts(String patientId) async {
     final result = await _client.request<List<dynamic>>(
-      (dio) => dio.get('/caretaker/contacts', queryParameters: {'patient_id': patientId}),
+      (dio) => dio.get('caretaker/contacts', queryParameters: {'patient_id': patientId}),
     );
 
     return result.map((data) => data.map((json) => ContactItem.fromJson(json)).toList());
@@ -21,7 +21,7 @@ class HelpRepository {
 
   Future<Either<AppFailure, bool>> triggerSOS(String patientId, double? lat, double? lng) async {
     final result = await _client.request<Map<String, dynamic>>(
-      (dio) => dio.post('/help/sos', data: {
+      (dio) => dio.post('help/sos', data: {
         'patient_id': patientId,
         'latitude': lat,
         'longitude': lng,

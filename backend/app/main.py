@@ -1,9 +1,9 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import auth, doctor, caretaker, patient
-from app.routes import saathi, medications, appointments
+from app.routes import saathi, medications, appointments, help
 from app.routes import alerts, media, memory, analytics
-from app.routes import reports, websocket, health
+from app.routes import reports, health, websocket, family
 from app.database.neo4j import verify_connection
 
 app = FastAPI(
@@ -40,7 +40,8 @@ app.include_router(memory.router, prefix="/memory")
 app.include_router(analytics.router, prefix="/analytics")
 app.include_router(reports.router, prefix="/reports")
 app.include_router(websocket.router)
-app.include_router(health.router)
+app.include_router(family.router, prefix="/family")
+app.include_router(help.router, prefix="/help")
 
 from app.database.postgres import engine, Base
 from app import models as _models  # Ensures all models are registered without shadowing main `app` obj

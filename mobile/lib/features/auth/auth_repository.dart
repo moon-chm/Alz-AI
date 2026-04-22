@@ -14,12 +14,12 @@ class AuthRepository {
   AuthRepository(this._client, this._storage);
 
   Future<Either<AppFailure, Unit>> requestOtp({
-    required String phone,
+    required String identifier,
     required String role,
   }) async {
     final result = await _client.request(
-      (dio) => dio.post('/auth/request-otp', data: {
-        'identifier': phone,
+      (dio) => dio.post('auth/request-otp', data: {
+        'identifier': identifier,
         'role': role,
       }),
     );
@@ -28,13 +28,13 @@ class AuthRepository {
   }
 
   Future<Either<AppFailure, AuthTokenResponse>> verifyOtp({
-    required String phone,
+    required String identifier,
     required String otp,
     required String role,
   }) async {
     final result = await _client.request<Map<String, dynamic>>(
-      (dio) => dio.post('/auth/login/otp', data: {
-        'identifier': phone,
+      (dio) => dio.post('auth/login/otp', data: {
+        'identifier': identifier,
         'otp': otp,
         'role': role,
       }),

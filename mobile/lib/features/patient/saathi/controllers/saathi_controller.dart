@@ -25,6 +25,16 @@ class Saathi extends _$Saathi {
     final patientId = await storage.getPatientId() ?? '';
     final level = ref.watch(patientLevelProvider);
 
+    if (patientId.isEmpty) {
+      final fallbacks = {
+        'hi': 'नमस्ते! मैं आपकी सारथी हूँ।',
+        'mr': 'नमस्ते! मी तुमची सारथी आहे।',
+        'en': 'Hello! I am your Saathi.',
+      };
+      state = SaathiState.idle(displayMessage: fallbacks[lang] ?? fallbacks['en']!);
+      return;
+    }
+
     final result = await ref.read(saathiRepositoryProvider).fetchGreeting(patientId, lang);
     
     result.fold(

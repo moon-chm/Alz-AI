@@ -1,10 +1,12 @@
 import React from 'react';
 import useVitals from '../../hooks/useVitals';
+import { usePatientContext } from '../../context/PatientContext';
 import { Heart, Activity, ActivitySquare, Moon, Loader } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 
 const VitalsPanel = () => {
-  const { vitals, isLoading, error, lastUpdated } = useVitals();
+  const { selectedPatient } = usePatientContext();
+  const { vitals, isLoading, error, lastUpdated } = useVitals(selectedPatient?.id);
 
   if (error) {
     return (
@@ -80,11 +82,15 @@ const VitalsPanel = () => {
       </div>
 
       <div className="mt-4 flex items-center justify-between text-sm text-gray-500">
-        <span>{isLoading ? 'Refreshing...' : 'Live data'}</span>
+        <span className="flex items-center gap-1">
+           {isLoading ? 'Refreshing...' : <><span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> Live Monitoring</>}
+        </span>
         {lastUpdated ? (
-          <span>Last refresh: {format(lastUpdated, 'h:mm:ss a')}</span>
+          <span title={format(lastUpdated, 'yyyy-MM-dd HH:mm:ss')}>
+             Last updated: {formatDistanceToNow(lastUpdated, { addSuffix: true })}
+          </span>
         ) : (
-          <span>-</span>
+          <span>No readings yet</span>
         )}
       </div>
     </div>

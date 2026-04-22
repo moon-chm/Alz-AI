@@ -55,7 +55,10 @@ class VitalsService {
 
       if (data.isEmpty) return null;
 
-      // Filter and pick latest for each
+      // 1. Sort by date descending to get most recent first
+      data.sort((a, b) => b.dateTo.compareTo(a.dateTo));
+
+      // 2. Filter and pick latest for each
       int heartRate = 0;
       int spo2 = 0;
       int steps = 0;
@@ -64,16 +67,11 @@ class VitalsService {
 
       for (var point in data) {
         final val = point.value;
-        if (point.type == HealthDataType.HEART_RATE) {
+        if (point.type == HealthDataType.HEART_RATE && heartRate == 0) {
           heartRate = (val as NumericHealthValue).numericValue.toInt();
-        } else if (point.type == HealthDataType.BLOOD_OXYGEN) {
+        } else if (point.type == HealthDataType.BLOOD_OXYGEN && spo2 == 0) {
           spo2 = ((val as NumericHealthValue).numericValue * 100).toInt();
-        } else if (point.type == HealthDataType.STEPS) {
-          // Steps need aggregation over the day, but getHealthDataFromTypes returns per-entry
-          // Usually we'd use getSteps() or aggregate here.
-        } else if (point.type == HealthDataType.SLEEP_SESSION) {
-          // Sleep session duration
-        } else if (point.type == HealthDataType.HEART_RATE_VARIABILITY_RMSSD) {
+        } else if (point.type == HealthDataType.HEART_RATE_VARIABILITY_RMSSD && hrv == null) {
           hrv = (val as NumericHealthValue).numericValue.toDouble();
         }
       }

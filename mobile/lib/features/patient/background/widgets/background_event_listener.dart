@@ -4,6 +4,7 @@ import 'package:alz_ai/core/services/tts_service.dart';
 import 'package:alz_ai/features/patient/background/models/background_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class BackgroundEventListener extends ConsumerStatefulWidget {
   final Widget child;
@@ -24,6 +25,40 @@ class _BackgroundEventListenerState extends ConsumerState<BackgroundEventListene
     _listenToEvents();
   }
 
+  void _handleFallDetected() {
+    final bool isResumed = WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    
+    if (isResumed) {
+      _showFallOverlay();
+    } else {
+      _showFallNotification();
+    }
+  }
+
+  Future<void> _showFallNotification() async {
+    final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+    
+    const AndroidNotificationDetails androidPlatformChannelSpecifics = AndroidNotificationDetails(
+      'emergency_v1',
+      'Emergency Alerts',
+      channelDescription: 'High priority alerts for safety events',
+      importance: Importance.max,
+      priority: Priority.high,
+      fullScreenIntent: true,
+      playSound: true,
+      category: AndroidNotificationCategory.alarm,
+    );
+    
+    NotificationDetails platformChannelSpecifics = const NotificationDetails(android: androidPlatformChannelSpecifics);
+    
+    await flutterLocalNotificationsPlugin.show(
+      911,
+      'FALL DETECTED!',
+      'Are you okay? Alerting your family in 10 seconds.',
+      platformChannelSpecifics,
+    );
+  }
+
   void _listenToEvents() {
     final service = FlutterBackgroundService();
     
@@ -40,7 +75,7 @@ class _BackgroundEventListenerState extends ConsumerState<BackgroundEventListene
 
     service.on('fall_event').listen((event) {
       if (event != null) {
-        _showFallOverlay();
+        _handleFallDetected();
       }
     });
 
@@ -132,7 +167,10 @@ class _BackgroundEventListenerState extends ConsumerState<BackgroundEventListene
       ),
     );
 
-    Overlay.of(context).insert(_fallOverlay!);
+    final overlay = Overlay.maybeOf(context);
+    if (overlay != null && overlay.mounted) {
+      overlay.insert(_fallOverlay!);
+    }
   }
 
   void _dismissFallOverlay() {

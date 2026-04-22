@@ -9,7 +9,10 @@ import 'package:workmanager/workmanager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:alz_ai/features/auth/screens/login_screen.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:alz_ai/core/services/background_service.dart';
 import 'package:alz_ai/core/theme/app_theme.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:alz_ai/core/providers/language_provider.dart';
 
 @pragma('vm:entry-point')
@@ -30,26 +33,39 @@ void callbackDispatcher() {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  await Workmanager().initialize(callbackDispatcher);
-  
+  try {
+    await Workmanager().initialize(callbackDispatcher);
+    
+    // Calculate next 8 AM
+    final now = DateTime.now();
+    var next8AM = DateTime(now.year, now.month, now.day, 8, 0);
+    if (now.isAfter(next8AM)) {
+      next8AM = next8AM.add(const Duration(days: 1));
+    }
+    final delay = next8AM.difference(now);
+
+    // Dynamic permission check on startup (for already-logged-in users)
+    final hasLoc = await Permission.location.isGranted;
+    final hasHealth = await Permission.activityRecognition.isGranted;
+
+    await BackgroundServiceInstance.initialize(
+      hasHealthPermissions: hasHealth,
+      hasLocationPermissions: hasLoc,
+    );
+
+    await Workmanager().registerPeriodicTask(
+      'behavior_task',
+      'behavior_check',
+      initialDelay: delay,
+      frequency: const Duration(hours: 24),
+    );
+  } catch (e) {
+    debugPrint('Workmanager initialization failed: $e');
+  }
+
   // Storage initialization
   const secureStorage = FlutterSecureStorage();
   StorageService(secureStorage);
-
-  // Calculate next 8 AM
-  final now = DateTime.now();
-  var next8AM = DateTime(now.year, now.month, now.day, 8, 0);
-  if (now.isAfter(next8AM)) {
-    next8AM = next8AM.add(const Duration(days: 1));
-  }
-  final delay = next8AM.difference(now);
-
-  await Workmanager().registerPeriodicTask(
-    'behavior_task',
-    'behavior_check',
-    initialDelay: delay,
-    frequency: const Duration(hours: 24),
-  );
 
   runApp(
     const ProviderScope(
