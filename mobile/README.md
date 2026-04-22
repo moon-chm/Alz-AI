@@ -1,4 +1,4 @@
-# alz_ai_patient
+# mobile
 
 A new Flutter project.
 

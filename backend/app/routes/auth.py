@@ -34,9 +34,9 @@ async def register_doctor(data: DoctorRegister, db: Session = Depends(get_db)):
     if not validate_nmc_number(data.nmc_number):
         raise HTTPException(400, "Invalid NMC number format (e.g. NMC-AB123)")
         
-    # Determine initial status based on System Mode
+    # Determine initial status based on System Mode or Auto-Activate flag
     initial_status = UserStatus.pending
-    if settings.system_mode == "DEMO" and settings.doctor_auto_activate:
+    if settings.doctor_auto_activate:
         initial_status = UserStatus.active
         
     user = User(

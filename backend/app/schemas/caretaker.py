@@ -27,6 +27,7 @@ class VitalsResponse(BaseModel):
     spo2: int
     steps: int
     sleep: float
+    hrv: Optional[float] = None
     recorded_at: datetime
 
 class PhotoResponse(BaseModel):

@@ -18,3 +18,19 @@ build/
 certs/
 secrets/
 PRODUCTION_SECRETS.txt
+
+# Development & Virtual Environments
+venv_torch/
+structure.txt
+audit.py
+audit2.py
+*.log
+*.tmp
+
+# AI Model weights and Large Binary Files
+*.h5
+*.pth
+*.pt
+*.onnx
+*.bin
+models/mri/

@@ -1,4 +1,0 @@
-enum UserRole {
-  patient,
-  caretaker,
-}

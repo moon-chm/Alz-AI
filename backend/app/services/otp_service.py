@@ -39,8 +39,11 @@ async def generate_otp(phone: str) -> str:
         r.incr(limit_key)
         r.expire(limit_key, 600) # 10 min window
 
-    # 2. OTP Generation
-    if settings.system_mode == "DEMO" or settings.otp_mode == "MOCK":
+    # 2. OTP Generation (Honor MOCK mode first)
+    if settings.otp_mode == "MOCK":
+        otp = "123456"
+        logger.info(f"[NEXUS-MOCK] Fixed OTP assigned for {phone}: {otp}")
+    elif settings.system_mode == "DEMO" and settings.otp_mode != "REAL":
         otp = "123456"
         logger.info(f"[NEXUS-DEMO] Fixed OTP assigned for {phone}: {otp}")
     else:
@@ -57,8 +60,8 @@ async def generate_otp(phone: str) -> str:
     if r:
         r.setex(key, settings.otp_expiry_mins * 60, json.dumps(data))
     
-    # 4. Delivery
-    if settings.system_mode == "PRODUCTION" and settings.otp_mode == "REAL":
+    # 4. Delivery (Prioritize REAL mode regardless of System Mode)
+    if settings.otp_mode == "REAL":
         message = f"[Alz-AI] Your security verification code is: {otp}. Valid for {settings.otp_expiry_mins} mins. Do not share it."
         await twilio_service.send_sms(phone, message)
     
