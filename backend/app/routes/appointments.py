@@ -8,6 +8,9 @@ from app.services.teleconsult_service import jitsi_provider
 from app.utils.jwt import get_current_user
 from datetime import datetime, timedelta
 import uuid
+import json
+import redis.asyncio as aioredis
+from app.config import settings
 
 router = APIRouter(tags=["appointments"])
 
@@ -93,6 +96,36 @@ async def cancel_appointment(id: uuid.UUID, current_user: User = Depends(get_cur
     app.status = AppointmentStatus.cancelled
     db.commit()
     return {"status": "cancelled"}
+
+@router.post("/{id}/init-teleconsult")
+async def init_teleconsult(id: uuid.UUID, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.doctor:
+        raise HTTPException(403, "Only doctors can initialize teleconsults")
+        
+    app = db.query(Appointment).filter(Appointment.id == id, Appointment.doctor_id == current_user.id).first()
+    if not app: raise HTTPException(404, "Appointment not found")
+    
+    if not app.meeting_url:
+        app.meeting_url = f"https://meet.jit.si/alz-ai-{str(app.id)[:8]}"
+        db.commit()
+        db.refresh(app)
+        
+    # Notify caretaker via Redis pub/sub
+    try:
+        r = aioredis.from_url(settings.redis_url)
+        channel = f"patient:{app.patient_id}:events"
+        message = json.dumps({
+            "type": "TELECONSULT_READY",
+            "appointment_id": str(app.id),
+            "link": app.meeting_url,
+            "doctor_name": current_user.full_name
+        })
+        await r.publish(channel, message)
+        await r.aclose()
+    except Exception as e:
+        print(f"Error publishing to Redis: {e}")
+        
+    return {"status": "teleconsult_initialized", "url": app.meeting_url}
 
 @router.get("/upcoming")
 async def upcoming_appointments(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
