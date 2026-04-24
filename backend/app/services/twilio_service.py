@@ -52,7 +52,14 @@ async def send_whatsapp(to_phone: str, message: str) -> bool:
         return False
         
     try:
-        to_formatted = f"whatsapp:+91{to_phone.strip()}"
+        to_clean = to_phone.strip()
+        if to_clean.startswith('+91'):
+            to_formatted = f"whatsapp:{to_clean}"
+        elif len(to_clean) == 10:
+            to_formatted = f"whatsapp:+91{to_clean}"
+        else:
+            to_formatted = f"whatsapp:+{to_clean}"
+            
         msg = client.messages.create(
             body=message,
             from_=settings.twilio_whatsapp_from,

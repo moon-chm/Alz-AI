@@ -116,6 +116,11 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     networks:
       - alzai-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   worker:
     build: ./backend
@@ -136,6 +141,23 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  critical-worker:
+    build: ./backend
+    container_name: alzai-critical-worker
+    command: python -m app.workers.queue_worker
+    environment:
+      PYTHONUNBUFFERED: 1
+    env_file: .env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+    networks:
+      - alzai-net
 
   frontend:
     build: ./frontend

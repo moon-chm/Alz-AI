@@ -117,23 +117,32 @@ class _MedicationCard extends ConsumerWidget {
                   children: [
                     Text(
                       med.name,
-                      style: Theme.of(context).textTheme.titleLarge,
-                      softWrap: true,
-                      overflow: TextOverflow.visible,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontSize: 18,
+                        height: 1.1,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Text(
                       scheduledTime != null ? timeFormat.format(scheduledTime) : med.time,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: AppTheme.textSecondary,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppTheme.primaryColor,
                         fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       med.doseInstructions,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                      softWrap: true,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.textSecondary,
+                        height: 1.2,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),

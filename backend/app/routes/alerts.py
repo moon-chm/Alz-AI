@@ -101,7 +101,7 @@ async def post_vitals(data: dict, db: Session = Depends(get_db)):
         
         # Publish location update
         await alert_service.publish_to_websocket(patient_id, {
-            "event_type": "location_update",
+            "event_type": "location_updated",
             "lat": data.get("lat"),
             "lng": data.get("lng")
         })

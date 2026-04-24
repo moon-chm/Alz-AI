@@ -7,6 +7,10 @@ from app.services import whisper_service, tts_service, saathi_engine, groq_servi
 import os
 import tempfile
 import uuid
+import logging
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["saathi"])
 
@@ -27,7 +31,7 @@ async def get_saathi_greeting(patient_id: str, db: Session = Depends(get_db)):
         raise HTTPException(404, "Patient not found")
         
     # Get context (mood, family, etc)
-    system_prompt = await saathi_engine.build_system_prompt(patient_id, patient)
+    system_prompt = await saathi_engine.build_system_prompt(patient_id, patient, db)
     
     # Ask AI for a simple, warm greeting based on the current context and rules
     user_prompt = f"Give me a single, warm opening greeting for {patient.full_name} in {patient.language}. Keep it under 2 sentences."
@@ -35,7 +39,10 @@ async def get_saathi_greeting(patient_id: str, db: Session = Depends(get_db)):
     from app.services import ai_orchestrator
     ai_result = await ai_orchestrator.generate_response(system_prompt, user_prompt)
     
-    return {"greeting": ai_result["text"]}
+    return {
+        "greeting": ai_result["text"],
+        "voice_sample_url": patient.voice_sample_url
+    }
 
 @router.post("/talk", response_model=SAATHITalkResponse)
 async def saathi_talk(
@@ -71,7 +78,7 @@ async def saathi_talk(
             raise HTTPException(404, "Patient not found")
 
         # 5. Build system prompt (Engine already has fallback)
-        system_prompt = await saathi_engine.build_system_prompt(patient_id, patient_db_record)
+        system_prompt = await saathi_engine.build_system_prompt(patient_id, patient_db_record, db)
 
         # 6. Call AI Orchestrator (Now with Redis cache fallback)
         from app.services import ai_orchestrator
@@ -89,7 +96,12 @@ async def saathi_talk(
         audio_url = ""
         try:
             slow_tts = (detected_mood == "agitated")
-            audio_url = await tts_service.text_to_speech(ai_response, patient_db_record.language, slow=slow_tts)
+            audio_url = await tts_service.text_to_speech(
+                ai_response, 
+                patient_db_record.language, 
+                slow=slow_tts, 
+                patient_id=patient_id
+            )
         except Exception as te:
             logger.error(f"⚠️ SAATHI: TTS generation failed: {te}")
             # audio_url remains empty, mobile will use text fallback
@@ -112,7 +124,7 @@ async def saathi_talk(
             logger.error(f"⚠️ SAATHI: Background record saving failed: {be}")
 
         return SAATHITalkResponse(
-            text=ai_response,
+            response=ai_response,
             audio_url=audio_url,
             mood=detected_mood
         )
@@ -121,7 +133,7 @@ async def saathi_talk(
         logger.error(f"❌ SAATHI: Critical Talk failure: {e}")
         # Final safety net — never 500
         return SAATHITalkResponse(
-            text="I'm right here with you. I'm just listening right now. How are you feeling?",
+            response="I'm right here with you. I'm just listening right now. How are you feeling?",
             audio_url="",
             mood="neutral"
         )
@@ -158,7 +170,7 @@ async def saathi_night_checkin(data: dict, db: Session = Depends(get_db)):
 @router.get("/context/{patient_id}", response_model=SAATHIContext)
 async def get_saathi_context(patient_id: str, db: Session = Depends(get_db)):
     patient_db_record = db.query(Patient).filter(Patient.id == patient_id).first()
-    system_prompt = await saathi_engine.build_system_prompt(patient_id, patient_db_record)
+    system_prompt = await saathi_engine.build_system_prompt(patient_id, patient_db_record, db)
     tokens = saathi_engine._estimate_tokens(system_prompt)
     
     return SAATHIContext(

@@ -371,6 +371,9 @@ async def delete_medication(medication_id: uuid.UUID, current_user: User = Depen
 async def send_photo(
     patient_id: Optional[uuid.UUID] = Query(None), 
     caption: Optional[str] = Form(None), 
+    memory_prompt: Optional[str] = Form(None),
+    people_involved: Optional[str] = Form(None),
+    importance_score: int = Form(3),
     file: UploadFile = File(...), 
     current_user: User = Depends(require_caretaker), 
     db: Session = Depends(get_db)
@@ -403,7 +406,10 @@ async def send_photo(
             patient_id=patient_id,
             sender_id=current_user.id,
             cloudinary_url=cloudinary_url,
-            caption=caption
+            caption=caption,
+            memory_prompt=memory_prompt,
+            people_involved=people_involved,
+            importance_score=importance_score
         )
         db.add(new_photo)
         db.commit()
@@ -437,6 +443,9 @@ async def get_photos(current_user: User = Depends(require_caretaker), db: Sessio
             "id": p.id,
             "cloudinary_url": p.cloudinary_url,
             "caption": p.caption,
+            "memory_prompt": p.memory_prompt,
+            "people_involved": p.people_involved,
+            "importance_score": p.importance_score or 3,
             "sender_name": p.sender.full_name if p.sender else "Caretaker",
             "relationship": relationship,
             "sent_at": p.sent_at

@@ -15,7 +15,9 @@ async def process_job(queue_name: str, payload_str: str):
             job_name = payload.get("job_name", "alert_dispatch_job")
             job_func = job_definitions_map.get(job_name)
             if job_func:
+                print(f"🚀 EXECUTING JOB: {job_name} on {queue_name}")
                 await job_func(payload)
+                print(f"✅ JOB COMPLETED: {job_name}")
         except Exception as e:
             print(f"Job failed on {queue_name}: {e}")
             traceback.print_exc()
