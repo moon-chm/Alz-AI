@@ -16,6 +16,8 @@ class Patient(Base):
     language = Column(String, nullable=False, default="Hindi")
     trusted_phone = Column(String, nullable=False)
     timezone = Column(String, nullable=True, default="UTC")
+    voice_sample_url = Column(String, nullable=True, default=None)
+    cloned_voice_id = Column(String, nullable=True, default=None)
     doctor_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     

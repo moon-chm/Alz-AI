@@ -23,32 +23,35 @@ class MinIOService:
             config=Config(signature_version="s3v4"),
             region_name="us-east-1" # MinIO default
         )
-        self._ensure_bucket_exists()
+        self._ensure_bucket_exists(self.bucket_name)
+        self._ensure_bucket_exists("voice-samples")
 
-    def _ensure_bucket_exists(self):
+    def _ensure_bucket_exists(self, bucket_name: str = None):
         """Programmatic bucket creation (Mandatory per requirements)"""
+        target_bucket = bucket_name or self.bucket_name
         try:
-            self.s3.head_bucket(Bucket=self.bucket_name)
-            logger.info(f"✅ MinIO: Bucket '{self.bucket_name}' already exists.")
+            self.s3.head_bucket(Bucket=target_bucket)
+            logger.info(f"✅ MinIO: Bucket '{target_bucket}' already exists.")
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code")
             if error_code == "404":
                 try:
-                    self.s3.create_bucket(Bucket=self.bucket_name)
-                    logger.info(f"🚀 MinIO: Bucket '{self.bucket_name}' created successfully.")
+                    self.s3.create_bucket(Bucket=target_bucket)
+                    logger.info(f"🚀 MinIO: Bucket '{target_bucket}' created successfully.")
                 except Exception as ex:
                     logger.error(f"❌ MinIO: Failed to create bucket: {ex}")
             else:
                 logger.error(f"❌ MinIO: Error checking bucket: {e}")
 
-    def upload_file(self, file_content: bytes, object_name: str, content_type: str = "application/octet-stream") -> str:
+    def upload_file(self, file_content: bytes, object_name: str, content_type: str = "application/octet-stream", bucket_name: str = None) -> str:
         """Uploads file with hierarchy and returns MD5 checksum"""
+        target_bucket = bucket_name or self.bucket_name
         try:
             # Calculate MD5 checksum
             checksum = hashlib.md5(file_content).hexdigest()
             
             self.s3.put_object(
-                Bucket=self.bucket_name,
+                Bucket=target_bucket,
                 Key=object_name,
                 Body=file_content,
                 ContentType=content_type,
@@ -59,15 +62,16 @@ class MinIOService:
             logger.error(f"❌ MinIO: Upload failed: {e}")
             raise e
 
-    def get_signed_url(self, object_name: str, expires_in_minutes: int = None) -> str:
+    def get_signed_url(self, object_name: str, expires_in_minutes: int = None, bucket_name: str = None) -> str:
         """Generates a temporary signed URL (Mandatory per requirements)"""
+        target_bucket = bucket_name or self.bucket_name
         if expires_in_minutes is None:
             expires_in_minutes = getattr(settings, "mri_url_expiry_minutes", 60)
             
         try:
             url = self.s3.generate_presigned_url(
                 "get_object",
-                Params={"Bucket": self.bucket_name, "Key": object_name},
+                Params={"Bucket": target_bucket, "Key": object_name},
                 ExpiresIn=expires_in_minutes * 60
             )
             return url
@@ -75,9 +79,10 @@ class MinIOService:
             logger.error(f"❌ MinIO: Failed to generate signed URL: {e}")
             return None
 
-    def delete_file(self, object_name: str) -> bool:
+    def delete_file(self, object_name: str, bucket_name: str = None) -> bool:
+        target_bucket = bucket_name or self.bucket_name
         try:
-            self.s3.delete_object(Bucket=self.bucket_name, Key=object_name)
+            self.s3.delete_object(Bucket=target_bucket, Key=object_name)
             return True
         except Exception as e:
             logger.error(f"❌ MinIO: Delete failed: {e}")

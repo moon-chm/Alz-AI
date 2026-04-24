@@ -6,6 +6,9 @@ const PhotoSender = ({ onUploadSuccess }) => {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [caption, setCaption] = useState('');
+  const [memoryPrompt, setMemoryPrompt] = useState('');
+  const [peopleInvolved, setPeopleInvolved] = useState('');
+  const [importanceScore, setImportanceScore] = useState(3);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
@@ -55,6 +58,9 @@ const PhotoSender = ({ onUploadSuccess }) => {
     if (preview) URL.revokeObjectURL(preview);
     setPreview(null);
     setCaption('');
+    setMemoryPrompt('');
+    setPeopleInvolved('');
+    setImportanceScore(3);
     setSuccess(false);
     setError(null);
     if (fileInputRef.current) {
@@ -71,7 +77,13 @@ const PhotoSender = ({ onUploadSuccess }) => {
     setSuccess(false);
 
     try {
-      await caretakerService.sendPhoto(file, caption);
+      const extraData = {
+        memory_prompt: memoryPrompt,
+        people_involved: peopleInvolved,
+        importance_score: importanceScore
+      };
+      
+      await caretakerService.sendPhoto(file, caption, extraData);
       
       setSuccess(true);
       setTimeout(() => {
@@ -139,19 +151,58 @@ const PhotoSender = ({ onUploadSuccess }) => {
               </button>
             </div>
             
-            <div className="flex-1 flex flex-col space-y-3">
+            <div className="flex-1 flex flex-col space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Caption (Optional)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Caption (Simple Greeting)</label>
                 <input 
                   type="text"
                   value={caption}
                   onChange={(e) => setCaption(e.target.value)}
-                  placeholder="E.g., Missing you!"
+                  placeholder="E.g., Good morning!"
                   disabled={isUploading}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 />
               </div>
-              <p className="text-xs text-gray-500 truncate">{file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)</p>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Who is in this photo?</label>
+                <input 
+                  type="text"
+                  value={peopleInvolved}
+                  onChange={(e) => setPeopleInvolved(e.target.value)}
+                  placeholder="E.g., You and your daughter Sunita"
+                  disabled={isUploading}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Memory Description (For SAATHI AI)</label>
+                <textarea 
+                  value={memoryPrompt}
+                  onChange={(e) => setMemoryPrompt(e.target.value)}
+                  placeholder="Describe the memory so SAATHI can talk about it..."
+                  disabled={isUploading}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
+                />
+                <p className="text-[10px] text-gray-400 mt-1">SAATHI will use this description to reminisce with the patient.</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Memory Importance</label>
+                <select
+                  value={importanceScore}
+                  onChange={(e) => setImportanceScore(parseInt(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white"
+                >
+                  <option value={1}>1 - Low Priority</option>
+                  <option value={2}>2 - Casual Memory</option>
+                  <option value={3}>3 - Regular Memory</option>
+                  <option value={4}>4 - High Importance (Recent Event)</option>
+                  <option value={5}>5 - Critical Anchor (Spouse/Core Memory)</option>
+                </select>
+              </div>
             </div>
           </div>
 

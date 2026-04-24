@@ -55,11 +55,21 @@ const deleteMedication = async (id, signal) => {
   return response.data;
 };
 
-const sendPhoto = async (file, caption, patientId = null, signal) => {
+const sendPhoto = async (file, caption, extraData = {}, patientId = null, signal) => {
   const formData = new FormData();
   formData.append('file', file);
   if (caption) {
     formData.append('caption', caption);
+  }
+  
+  if (extraData.memory_prompt) {
+    formData.append('memory_prompt', extraData.memory_prompt);
+  }
+  if (extraData.people_involved) {
+    formData.append('people_involved', extraData.people_involved);
+  }
+  if (extraData.importance_score) {
+    formData.append('importance_score', extraData.importance_score);
   }
   
   const url = patientId ? `/caretaker/photo/send?patient_id=${patientId}` : '/caretaker/photo/send';

@@ -43,6 +43,9 @@ class PhotoResponse(BaseModel):
     id: UUID
     cloudinary_url: str
     caption: Optional[str] = None
+    memory_prompt: Optional[str] = None
+    people_involved: Optional[str] = None
+    importance_score: int = 3
     sender_name: str
     relationship: Optional[str] = None
     sent_at: datetime

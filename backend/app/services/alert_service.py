@@ -49,6 +49,24 @@ async def create_alert(
         else:
             r.setex(dedup_key, DEDUP_TTL, 1)
 
+    # Auto-resolve caretaker phone and patient name if missing for high-severity alerts
+    if severity >= 4 and (not caretaker_phone or not patient_name):
+        from app.models.patient import Patient, CaretakerPatient
+        from app.models.user import User
+        
+        # Get patient name
+        patient = db.query(Patient).filter(Patient.id == patient_id).first()
+        if patient:
+            patient_name = patient.full_name
+            
+        # Get primary caretaker phone
+        link = db.query(CaretakerPatient, User).join(User, CaretakerPatient.caretaker_id == User.id).filter(
+            CaretakerPatient.patient_id == patient_id,
+            CaretakerPatient.is_primary == True
+        ).first()
+        if link:
+            caretaker_phone = link[1].phone
+
     # Create DB record
     alert = Alert(
         patient_id=patient_id,
@@ -83,12 +101,13 @@ async def create_alert(
     
     elif severity == 4 and r:
         # P4: queue to critical Redis queue
-        r.rpush("queue:critical", json.dumps({
-            "job": "alert_dispatch",
+        r.rpush("queue:1:critical", json.dumps({
+            "job_name": "alert_dispatch_job",
             "alert_id": str(alert.id),
             "patient_id": str(patient_id),
-            "caretaker_phone": caretaker_phone,
-            "message": message
+            "contact": caretaker_phone,
+            "message": message,
+            "severity": severity
         }))
     
     elif severity <= 2 and r:

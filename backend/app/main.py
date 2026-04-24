@@ -42,6 +42,7 @@ app.include_router(reports.router, prefix="/reports")
 app.include_router(websocket.router)
 app.include_router(family.router, prefix="/family")
 app.include_router(help.router, prefix="/help")
+app.include_router(health.router, prefix="/health")
 
 from app.database.postgres import engine, Base
 from app import models as _models  # Ensures all models are registered without shadowing main `app` obj

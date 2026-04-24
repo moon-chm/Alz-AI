@@ -6,7 +6,7 @@ import redis
 
 router = APIRouter(tags=["health"])
 
-@router.get("/health")
+@router.get("")
 async def health_check():
     status = {"status": "ok", "service": "alz-ai-backend"}
     
@@ -35,7 +35,9 @@ async def health_check():
     except:
         status["redis"] = False
     
-    # Groq (just check key exists)
+    # AI Providers
     status["groq"] = bool(settings.groq_api_key)
+    status["elevenlabs"] = bool(settings.elevenlabs_api_key)
+    status["cloudinary"] = bool(settings.cloudinary_url)
     
     return status

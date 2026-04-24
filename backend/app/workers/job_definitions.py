@@ -16,8 +16,8 @@ async def alert_dispatch_job(payload: dict):
         # Check PostgreSQL
         # Call Whatsapp safely depending on DND window
         severity = payload.get("severity", 3)
-        if severity == 4:
-            send_whatsapp(payload.get("contact"), f"URGENT: {payload.get('message')}")
+        if severity == 4 and payload.get("contact"):
+            await send_whatsapp(payload.get("contact"), f"URGENT: {payload.get('message')}")
     except Exception as e:
         if retries < 3:
             backoffs = [10, 30, 60]

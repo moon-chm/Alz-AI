@@ -8,14 +8,32 @@ import 'package:alz_ai/features/patient/saathi/repositories/saathi_repository.da
 import 'package:alz_ai/core/providers/level_provider.dart';
 import 'package:alz_ai/core/providers/language_provider.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 part 'saathi_controller.g.dart';
 
 @riverpod
 class Saathi extends _$Saathi {
+  late final AudioPlayer _audioPlayer;
+
   @override
   SaathiState build() {
+    _audioPlayer = AudioPlayer();
     _init();
+    
+    // Smooth State Reset on Audio Completion
+    _audioPlayer.onPlayerComplete.listen((_) {
+      state.maybeMap(
+        speaking: (speakingState) {
+          state = SaathiState.idle(displayMessage: speakingState.response);
+        },
+        orElse: () {},
+      );
+    });
+
+    // Cleanup player on dispose
+    ref.onDispose(() => _audioPlayer.dispose());
+    
     return const SaathiState.idle(displayMessage: '...');
   }
 
@@ -39,12 +57,22 @@ class Saathi extends _$Saathi {
     
     result.fold(
       (l) => _handleError(lang),
-      (greeting) {
+      (greetingData) async {
+        final greeting = greetingData.text;
+        final voiceSampleUrl = greetingData.voiceSampleUrl;
+        
         state = SaathiState.idle(displayMessage: greeting);
+        
         if (level == 3) {
           final tts = ref.read(ttsServiceProvider);
-          tts.setLanguage(lang);
-          tts.speak(greeting);
+          await tts.setLanguage(lang);
+
+          if (voiceSampleUrl != null && voiceSampleUrl.isNotEmpty) {
+            await tts.playAudioFromUrl(voiceSampleUrl);
+            await tts.speak(greeting);
+          } else {
+            await tts.speak(greeting);
+          }
         }
       },
     );
@@ -52,6 +80,7 @@ class Saathi extends _$Saathi {
 
   Future<void> startRecording() async {
     try {
+      await _audioPlayer.stop();
       await ref.read(ttsServiceProvider).stop();
       await ref.read(audioRecorderServiceProvider).startRecording();
       state = const SaathiState.recording();
@@ -79,7 +108,10 @@ class Saathi extends _$Saathi {
 
     result.fold(
       (l) => _handleError(ref.read(languageProvider)),
-      (response) async {
+      (data) async {
+        final response = data['response'] as String? ?? '';
+        final audioUrl = data['audio_url'] as String?;
+
         // Cache response string (keep last 5)
         final cache = prefs.getStringList('saathi_cache') ?? [];
         if (!cache.contains(response)) {
@@ -89,14 +121,23 @@ class Saathi extends _$Saathi {
         }
 
         state = SaathiState.speaking(response: response);
-        final lang = ref.read(languageProvider);
-        final tts = ref.read(ttsServiceProvider);
-        await tts.setLanguage(lang);
-        await tts.speak(response);
         
-        Future.delayed(const Duration(seconds: 2), () {
-          state = SaathiState.idle(displayMessage: response);
-        });
+        if (audioUrl != null && audioUrl.isNotEmpty) {
+          try {
+            await _audioPlayer.play(UrlSource(audioUrl));
+          } catch (e) {
+            // Fallback to TTS if streaming fails
+            final lang = ref.read(languageProvider);
+            final tts = ref.read(ttsServiceProvider);
+            await tts.setLanguage(lang);
+            await tts.speak(response);
+          }
+        } else {
+          final lang = ref.read(languageProvider);
+          final tts = ref.read(ttsServiceProvider);
+          await tts.setLanguage(lang);
+          await tts.speak(response);
+        }
       },
     );
   }
@@ -112,10 +153,6 @@ class Saathi extends _$Saathi {
       final tts = ref.read(ttsServiceProvider);
       await tts.setLanguage(lang);
       await tts.speak(response);
-      
-      Future.delayed(const Duration(seconds: 2), () {
-        state = SaathiState.idle(displayMessage: response);
-      });
       return;
     }
 

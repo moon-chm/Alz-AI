@@ -125,11 +125,26 @@ class BackgroundServiceInstance {
     geofenceService.events.listen((event) async {
        service.invoke('geofence_event', event.toJson());
        
-       // Immediate sync on geofence breach
+       // Immediate sync and voice warning on geofence breach
        if (event is GeofenceBreached) {
-          final prefs = await SharedPreferences.getInstance();
-          final patientId = prefs.getString('patient_id');
-          final token = prefs.getString('access_token');
+          const secureStorage = FlutterSecureStorage(
+            aOptions: AndroidOptions(encryptedSharedPreferences: true),
+          );
+          final lang = await secureStorage.read(key: 'language') ?? 'en';
+          
+          // 1. Voice Warning (Background Isolate)
+          final messages = {
+            'hi': 'Aai, aap ghar se door ja rahi hain. Kripya ghar laut chaliye.',
+            'mr': 'Aai, tumi ghara pasun dur challat ahat. Krupaya ghari parat ya.',
+            'en': 'You are moving away from home. Please return to your safe area.',
+          };
+          final msg = messages[lang] ?? messages['en']!;
+          await tts.setLanguage(lang == 'hi' ? 'hi-IN' : (lang == 'mr' ? 'mr-IN' : 'en-US'));
+          await tts.speak(msg);
+
+          // 2. Sync to Backend
+          final patientId = await secureStorage.read(key: 'patient_id');
+          final token = await secureStorage.read(key: 'access_token');
           if (patientId != null && token != null) {
              await dio.post(
                'patient/location',

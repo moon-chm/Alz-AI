@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import Layout from '../../components/layout/Layout';
 import MemoryCard from '../../components/caretaker/MemoryCard';
 import MemoryForm from '../../components/caretaker/MemoryForm';
+import VoiceSampleModal from '../../components/caretaker/VoiceSampleModal';
 import memoryService from '../../services/memory.service';
 import { usePatientContext } from '../../context/PatientContext';
 import { showSuccess, showError } from '../../components/shared/Toast';
-import { Search, Plus, Filter, Type, Trash2 } from 'lucide-react';
+import { Search, Plus, Filter, Type, Trash2, Mic } from 'lucide-react';
 
 const MemoryBank = () => {
   const { selectedPatient } = usePatientContext();
@@ -14,6 +15,7 @@ const MemoryBank = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingMemory, setEditingMemory] = useState(null);
   const [memoryToDelete, setMemoryToDelete] = useState(null);
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCat, setFilterCat] = useState('All');
 
@@ -108,12 +110,21 @@ const MemoryBank = () => {
             ))}
           </div>
 
-          <button 
-            onClick={() => { setShowForm(true); setEditingMemory(null); }}
-            className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-bold transition-colors shadow-sm flex items-center justify-center gap-2"
-          >
-            <Plus className="w-5 h-5" /> Add Memory
-          </button>
+          <div className="flex w-full md:w-auto gap-3">
+            <button 
+              onClick={() => setShowVoiceModal(true)}
+              className="flex-1 md:flex-none border border-blue-600/30 text-blue-600 hover:bg-blue-50 px-5 py-2.5 rounded-lg font-bold transition-colors shadow-sm flex items-center justify-center gap-2 bg-white"
+            >
+              <Mic className="w-5 h-5" /> Set SAATHI Voice
+            </button>
+
+            <button 
+              onClick={() => { setShowForm(true); setEditingMemory(null); }}
+              className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-bold transition-colors shadow-sm flex items-center justify-center gap-2"
+            >
+              <Plus className="w-5 h-5" /> Add Memory
+            </button>
+          </div>
         </div>
 
         {showForm && (
@@ -203,6 +214,14 @@ const MemoryBank = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Voice Sample Modal */}
+      {showVoiceModal && selectedPatient?.id && (
+        <VoiceSampleModal 
+          patientId={selectedPatient.id} 
+          onClose={() => setShowVoiceModal(false)} 
+        />
       )}
     </Layout>
   );

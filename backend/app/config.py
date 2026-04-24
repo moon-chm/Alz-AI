@@ -26,7 +26,13 @@ class Settings(BaseSettings):
     cloudinary_cloud_name: str = ""
     cloudinary_api_key: str = ""
     cloudinary_api_secret: str = ""
+    cloudinary_url: str = ""
     redis_url: str = 'redis://redis:6379'
+    
+    # AI Voice
+    sarvam_api_key: str = ""
+    elevenlabs_api_key: str = ""
+    elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
 
     # ✅ Infrastructure Fields (Docker/Local)
     postgres_user: str = "alzai"

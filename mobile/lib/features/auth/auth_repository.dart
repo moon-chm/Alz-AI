@@ -14,21 +14,12 @@ class AuthRepository {
   AuthRepository(this._client, this._storage);
 
   Future<Either<AppFailure, Unit>> requestOtp({
-<<<<<<< HEAD
     required String identifier,
     required String role,
   }) async {
     final result = await _client.request(
       (dio) => dio.post('auth/request-otp', data: {
         'identifier': identifier,
-=======
-    required String phone,
-    required String role,
-  }) async {
-    final result = await _client.request(
-      (dio) => dio.post('/auth/request-otp', data: {
-        'identifier': phone,
->>>>>>> origin/main
         'role': role,
       }),
     );
@@ -37,22 +28,13 @@ class AuthRepository {
   }
 
   Future<Either<AppFailure, AuthTokenResponse>> verifyOtp({
-<<<<<<< HEAD
     required String identifier,
-=======
-    required String phone,
->>>>>>> origin/main
     required String otp,
     required String role,
   }) async {
     final result = await _client.request<Map<String, dynamic>>(
-<<<<<<< HEAD
       (dio) => dio.post('auth/login/otp', data: {
         'identifier': identifier,
-=======
-      (dio) => dio.post('/auth/login/otp', data: {
-        'identifier': phone,
->>>>>>> origin/main
         'otp': otp,
         'role': role,
       }),
@@ -62,6 +44,7 @@ class AuthRepository {
       (failure) => left(failure),
       (data) async {
         try {
+          // Backend wraps response in success_response(data=...)
           final authData = AuthTokenResponse.fromJson(data['data']);
           
           await _storage.saveTokens(

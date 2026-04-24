@@ -67,6 +67,7 @@ class _BackgroundEventListenerState extends ConsumerState<BackgroundEventListene
         final backgroundEvent = BackgroundEvent.fromJson(event);
         if (backgroundEvent is GeofenceBreached) {
           setState(() => _geofenceBreached = true);
+          _warnGeofenceBreach();
         } else if (backgroundEvent is GeofenceRestored) {
           setState(() => _geofenceBreached = false);
         }
@@ -176,6 +177,20 @@ class _BackgroundEventListenerState extends ConsumerState<BackgroundEventListene
   void _dismissFallOverlay() {
     _fallOverlay?.remove();
     _fallOverlay = null;
+  }
+
+  void _warnGeofenceBreach() {
+    final lang = ref.read(languageProvider);
+    final tts = ref.read(ttsServiceProvider);
+    
+    final msgs = {
+      'hi': 'Aai, aap ghar se door ja rahi hain. Kripya ghar laut chaliye.',
+      'mr': 'Aai, tumi ghara pasun dur challat ahat. Krupaya ghari parat ya.',
+      'en': 'You are moving away from home. Please return to your safe area.',
+    };
+
+    tts.setLanguage(lang);
+    tts.speak(msgs[lang] ?? msgs['en']!);
   }
 
   @override

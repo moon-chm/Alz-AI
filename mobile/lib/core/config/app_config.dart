@@ -12,11 +12,11 @@ class AppConfig {
     switch (environment) {
       case AppEnvironment.devPhysical:
       case AppEnvironment.devEmulator:
-        return 'http://10.230.253.93/api/';
+        return 'http://10.14.1.177/api/';
       case AppEnvironment.prod:
         // TEMPORARY: Local demo configuration using host IP.
         // Replace with 'https://app.alz-ai.org/api/' once SSL/Domain is deployed.
-        return 'http://10.230.253.93/api/';
+        return 'http://10.14.1.177/api/';
     }
   }
 
@@ -27,11 +27,11 @@ class AppConfig {
     switch (environment) {
       case AppEnvironment.devPhysical:
       case AppEnvironment.devEmulator:
-        return 'ws://10.230.253.93/ws/';
+        return 'ws://10.14.1.177/ws/';
       case AppEnvironment.prod:
         // TEMPORARY: Local demo configuration using host IP.
         // Replace with 'wss://app.alz-ai.org/ws/' once SSL/Domain is deployed.
-        return 'ws://10.230.253.93/ws/';
+        return 'ws://10.14.1.177/ws/';
     }
   }
 

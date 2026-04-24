@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 class SAATHITalkResponse(BaseModel):
-    text: str
+    response: str
     audio_url: str
     mood: str
 

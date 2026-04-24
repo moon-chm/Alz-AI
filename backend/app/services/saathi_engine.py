@@ -1,7 +1,14 @@
 from app.services import memory_service
 from app.config import settings
+from app.models.photo import Photo
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
+from sqlalchemy.orm import Session
+from app.models.medication import Medication
+from app.models.adherence_log import AdherenceLog, AdherenceStatus
+from app.models.appointment import Appointment, AppointmentStatus
+from app.models.user import User
+from app.models.vitals import Vitals
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +29,10 @@ ABOUT {preferred_name}:
 - Upcoming visits: {visits_str}
 - Today's medications: {meds_str}
 
-PERSONAL MEMORIES:
+VISUAL MEMORIES (Photos shared by family):
+{visual_memories_str}
+
+PERSONAL MEMORIES (Recorded events):
 {memories_str}
 
 DAILY HABITS:
@@ -46,7 +56,8 @@ YOUR RULES — NEVER BREAK THESE:
 - Always end with something warm or hopeful
 - If mood seems sad — mention a family member or favourite memory
 - Never say you are an AI — you are SAATHI, their companion
-{emotion_rules}"""
+{emotion_rules}
+{vitals_alert}"""
 
 def _estimate_tokens(text: str) -> int:
     """Rough token estimate: 1 token ≈ 4 characters"""
@@ -79,6 +90,16 @@ def _format_memories(memories: list, budget: int) -> str:
         token_count += tokens
     return "\n".join(lines) if lines else "No memories recorded yet"
 
+def _format_visual_memories(photos: list) -> str:
+    if not photos:
+        return "No family photos shared recently."
+    lines = []
+    for p in photos:
+        context = p.memory_prompt or p.caption or "A beautiful photo"
+        people = f" with {p.people_involved}" if p.people_involved else ""
+        lines.append(f"- {context}{people} (Sent on {p.sent_at.strftime('%b %d')})")
+    return "\n".join(lines)
+
 def _get_emotion_rules(mood: str) -> str:
     if not mood:
         return ""
@@ -108,7 +129,7 @@ def _get_emotion_rules(mood: str) -> str:
         )
     return ""
 
-async def build_system_prompt(patient_id: str, patient_db_record=None) -> str:
+async def build_system_prompt(patient_id: str, patient_db_record=None, db: Session = None) -> str:
     """
     Build SAATHI's personalized system prompt.
     Implements 3-tier memory prioritization with 2500 token budget.
@@ -158,7 +179,59 @@ async def build_system_prompt(patient_id: str, patient_db_record=None) -> str:
         # TIER 1 — Always included (400 tokens)
         family_str = _format_family(family)
         visits_str = _format_visits(upcoming_visits)
-        meds_str = "Check with caretaker for today's medications"  # Will be enhanced if DB passed
+        
+        # Fallback to postgres appointments if Neo4j is empty
+        if not upcoming_visits and db:
+            try:
+                upcoming_apps = db.query(Appointment, User).join(User, Appointment.doctor_id == User.id).filter(
+                    Appointment.patient_id == patient_id,
+                    Appointment.scheduled_at >= datetime.utcnow(),
+                    Appointment.status != AppointmentStatus.cancelled
+                ).order_by(Appointment.scheduled_at.asc()).limit(3).all()
+                
+                if upcoming_apps:
+                    apps_list = []
+                    for app, doc in upcoming_apps:
+                        date_str = app.scheduled_at.strftime("%A, %b %d at %I:%M %p")
+                        apps_list.append(f"Dr. {doc.full_name} on {date_str} ({app.mode})")
+                    visits_str = "Scheduled Clinic Visits: " + ", ".join(apps_list)
+            except Exception as ae:
+                logger.error(f"Error fetching appointments for SAATHI: {ae}")
+        
+        # Real Medication Awareness
+        meds_str = "Check with caretaker for today's medications"
+        if db:
+            try:
+                today_str = datetime.now().strftime("%Y-%m-%d")
+                active_meds = db.query(Medication).filter(
+                    Medication.patient_id == patient_id,
+                    Medication.is_active == True
+                ).all()
+
+                if active_meds:
+                    med_lines = []
+                    for med in active_meds:
+                        # Find adherence for today
+                        logs = db.query(AdherenceLog).filter(
+                            AdherenceLog.medication_id == med.id,
+                            AdherenceLog.confirmed_date == today_str
+                        ).all()
+                        
+                        taken_times = [l.scheduled_time for l in logs if l.status == AdherenceStatus.taken]
+                        
+                        status_parts = []
+                        for s_time in med.scheduled_times:
+                            if s_time in taken_times:
+                                status_parts.append(f"{s_time} (taken)")
+                            else:
+                                status_parts.append(f"{s_time} (upcoming)")
+                        
+                        med_lines.append(f"- {med.name} ({med.dosage}): {', '.join(status_parts)}")
+                    
+                    meds_str = "\n".join(med_lines)
+            except Exception as me:
+                logger.error(f"Error fetching meds for SAATHI: {me}")
+                meds_str = "Check with caretaker for today's medications"
 
         # TIER 2 — Emotional anchors (300 tokens, inject when mood is difficult)
         tier2_memories = [m for m in all_memories if m.get("category") in ["family", "personal"]]
@@ -192,6 +265,32 @@ async def build_system_prompt(patient_id: str, patient_db_record=None) -> str:
 
         emotion_rules = _get_emotion_rules(last_mood)
 
+        # Real-time Vitals Awareness (Task 6)
+        vitals_alert = ""
+        if db:
+            try:
+                ten_mins_ago = datetime.utcnow() - timedelta(minutes=10)
+                latest_vitals = db.query(Vitals).filter(
+                    Vitals.patient_id == patient_id,
+                    Vitals.recorded_at >= ten_mins_ago
+                ).order_by(Vitals.recorded_at.desc()).first()
+                
+                if latest_vitals and latest_vitals.hr > 100:
+                    vitals_alert = f"\n🚨 NOTIFICATION: The patient's heart rate is currently elevated ({latest_vitals.hr} BPM). They may be physically stressed. Use maximum calm, speak slowly, and gently suggest they take a deep breath or listen to some music with you."
+            except Exception as ve:
+                logger.debug(f"SAATHI: No recent vitals or error: {ve}")
+
+        # Real Photo Memories (Task 4)
+        visual_memories_str = "No family photos shared recently."
+        if db:
+            try:
+                top_photos = db.query(Photo).filter(
+                    Photo.patient_id == patient_id
+                ).order_by(Photo.importance_score.desc(), Photo.sent_at.desc()).limit(5).all()
+                visual_memories_str = _format_visual_memories(top_photos)
+            except Exception as pe:
+                logger.error(f"Error fetching photos for SAATHI: {pe}")
+
         prompt = SYSTEM_TEMPLATE.format(
             preferred_name=preferred_name,
             age=age,
@@ -200,12 +299,14 @@ async def build_system_prompt(patient_id: str, patient_db_record=None) -> str:
             family_str=family_str,
             visits_str=visits_str,
             meds_str=meds_str,
+            visual_memories_str=visual_memories_str,
             memories_str=memories_str,
             habits_str=habits_str,
             triggers_str=triggers_str,
             last_mood=last_mood,
             conversations_str=conversations_str,
-            emotion_rules=emotion_rules
+            emotion_rules=emotion_rules,
+            vitals_alert=vitals_alert
         )
 
         # Enforce token budget
