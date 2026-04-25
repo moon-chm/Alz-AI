@@ -4,13 +4,13 @@ from app.routes import auth, doctor, caretaker, patient
 from app.routes import saathi, medications, appointments, help
 from app.routes import alerts, media, memory, analytics
 from app.routes import reports, health, websocket, family
+from app.routes import clinical_plans, location
 from app.database.neo4j import verify_connection
 
 app = FastAPI(
     title="Alz-AI API",
     description="Alzheimer's Care Platform API",
-    version="1.0.0",
-    root_path="/api"
+    version="1.0.0"
 )
 
 app.add_middleware(
@@ -19,7 +19,10 @@ app.add_middleware(
         "http://localhost",
         "http://localhost:3000",
         "http://localhost:5173",
-        "http://127.0.0.1"
+        "http://127.0.0.1",
+        "http://127.0.0.1:80",
+        "http://10.230.253.93",
+        "http://10.230.253.93:80",
     ],
     allow_credentials=False,
     allow_methods=["*"],
@@ -43,6 +46,8 @@ app.include_router(websocket.router)
 app.include_router(family.router, prefix="/family")
 app.include_router(help.router, prefix="/help")
 app.include_router(health.router, prefix="/health")
+app.include_router(location.router, prefix="/location")
+app.include_router(clinical_plans.router, prefix="/clinical-plans")
 
 from app.database.postgres import engine, Base
 from app import models as _models  # Ensures all models are registered without shadowing main `app` obj

@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import Layout from '../../components/layout/Layout';
 import caretakerService from '../../services/caretaker.service';
 import { usePatientContext } from '../../context/PatientContext';
-import { Calendar, Clock, User, Plus, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
-import { format, isAfter, isBefore, startOfToday } from 'date-fns';
+import useWebSocket from '../../hooks/useWebSocket';
+import { Calendar, Clock, User, Plus, X, CheckCircle, AlertCircle, Loader2, Wifi, WifiOff } from 'lucide-react';
+import { format, isAfter, isBefore } from 'date-fns';
 import { showSuccess, showError } from '../../components/shared/Toast';
 
 const Appointments = () => {
@@ -12,6 +13,11 @@ const Appointments = () => {
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // ✅ Connect to WebSocket so TELECONSULT_READY events are received
+  // GlobalTeleconsultAlert (in Layout) listens for the 'teleconsult-ready' window event
+  // that useWebSocket dispatches when the doctor clicks "Join".
+  const { isConnected } = useWebSocket(selectedPatient?.id ?? null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -33,7 +39,7 @@ const Appointments = () => {
     setLoading(true);
     try {
       const data = await caretakerService.getAppointments();
-      setAppointments(data);
+      setAppointments(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to fetch appointments:', err);
     } finally {
@@ -90,7 +96,13 @@ const Appointments = () => {
               </div>
               <div>
                  <h2 className="text-xl font-bold text-gray-900">Manage Schedule</h2>
-                 <p className="text-sm text-gray-500 font-medium">Coordinate visits with doctors</p>
+                 <p className="text-sm text-gray-500 font-medium flex items-center gap-2">
+                   Coordinate visits with doctors
+                   {isConnected
+                     ? <span className="inline-flex items-center gap-1 text-xs text-green-600 font-bold"><Wifi className="w-3 h-3" /> Live</span>
+                     : <span className="inline-flex items-center gap-1 text-xs text-gray-400"><WifiOff className="w-3 h-3" /> Connecting...</span>
+                   }
+                 </p>
               </div>
            </div>
            <button 

@@ -37,12 +37,18 @@ const uploadMRI = async (patientId, file) => {
 };
 
 const getAppointments = async () => {
-  const response = await api.get('/appointments');
-  return response.data;
+  const response = await api.get('/appointments/');
+  // Ensure we always return an array even if the API shape changes
+  return Array.isArray(response.data) ? response.data : (response.data?.items ?? response.data?.appointments ?? []);
 };
 
 const updateAppointment = async (id, data) => {
   const response = await api.put(`/appointments/${id}`, data);
+  return response.data;
+};
+
+const initTeleconsult = async (id) => {
+  const response = await api.post(`/appointments/${id}/init-teleconsult`);
   return response.data;
 };
 
@@ -75,6 +81,16 @@ const getMRIHistory = async (patientId, limit = 10, offset = 0) => {
   return response.data;
 };
 
+const createClinicalPlan = async (data) => {
+  const response = await api.post('/clinical-plans', data);
+  return response.data;
+};
+
+const getClinicalPlans = async (patientId) => {
+  const response = await api.get(`/clinical-plans/${patientId}`);
+  return response.data;
+};
+
 export default {
   getDashboard,
   addPatient,
@@ -87,6 +103,9 @@ export default {
   confirmMRIAnalysis,
   getAppointments,
   updateAppointment,
+  initTeleconsult,
   getPatients,
   getMRIHistory,
+  createClinicalPlan,
+  getClinicalPlans,
 };

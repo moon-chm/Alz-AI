@@ -34,3 +34,14 @@ audit2.py
 *.onnx
 *.bin
 models/mri/
+
+# Auto-Generated / Agent Context
+.agent/
+GSD.MD
+
+# Media and Throwaway Testing Scripts
+*.mp3
+*.wav
+test_local_tts.py
+verify_voice_api.py
+package-lock.json

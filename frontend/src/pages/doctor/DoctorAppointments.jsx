@@ -18,7 +18,7 @@ const DoctorAppointments = () => {
     setLoading(true);
     try {
       const data = await doctorService.getAppointments();
-      setAppointments(data);
+      setAppointments(Array.isArray(data) ? data : []);
     } catch (err) {
       setError('Failed to load appointments. Please try again later.');
     } finally {
@@ -26,13 +26,27 @@ const DoctorAppointments = () => {
     }
   };
 
-  const handleJoinCall = (appointment) => {
-    // Modular WebRTC point - for now, using a placeholder or window.open
-    const roomName = `alz-ai-${appointment.id.substring(0, 8)}`;
-    const jitsiUrl = `https://meet.jit.si/${roomName}`;
-    
-    showSuccess(`Joining teleconsultation for ${appointment.patient_name}`);
-    window.open(jitsiUrl, '_blank');
+  const handleJoinCall = async (appointment) => {
+    try {
+      showSuccess(`Joining teleconsultation for ${appointment.patient_name}...`);
+      const response = await doctorService.initTeleconsult(appointment.id);
+      if (response.url) {
+         window.open(response.url, '_blank');
+      } else if (appointment.meeting_url) {
+         window.open(appointment.meeting_url, '_blank');
+      } else {
+         // fallback if it wasn't created yet or mode differs
+         const roomName = `alz-ai-${appointment.id.substring(0, 8)}`;
+         const jitsiUrl = `https://meet.jit.si/${roomName}`;
+         window.open(jitsiUrl, '_blank');
+      }
+    } catch (err) {
+       console.error("Failed to init teleconsult", err);
+       // fallback
+       const roomName = `alz-ai-${appointment.id.substring(0, 8)}`;
+       const jitsiUrl = `https://meet.jit.si/${roomName}`;
+       window.open(jitsiUrl, '_blank');
+    }
   };
 
   const getStatusColor = (status) => {
