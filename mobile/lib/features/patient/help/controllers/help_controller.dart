@@ -34,31 +34,32 @@ class Help extends _$Help {
     final lang = ref.read(languageProvider);
     final tts = ref.read(ttsServiceProvider);
 
-    // Step 1: TTS speak
+    // Step 1: Immediately start cascading calls (direct phone call) so response time is instant!
+    final currentState = state;
+    if (currentState is HelpStateLoaded) {
+      _startCascadingCalls(currentState.contacts);
+    }
+
+    // Step 2: TTS speak (fire and forget, do not await)
     final voiceMessages = {
       'en': 'I am calling your family now. Do not worry.',
       'hi': 'माँ, मैं अभी प्रिया को कॉल कर रही हूँ। घबराइए मत।',
       'mr': 'आई, मी आता प्रियाला कॉल करतो. काळजी करू नका।',
     };
-    await tts.setLanguage(lang);
-    await tts.speak(voiceMessages[lang] ?? voiceMessages['en']!);
+    tts.setLanguage(lang).then((_) {
+      tts.speak(voiceMessages[lang] ?? voiceMessages['en']!);
+    });
 
-    // Step 2 & 3: GPS and Repository Call simultaneously
-    final patientId = await ref.read(storageServiceProvider).getPatientId();
-    if (patientId == null) return;
-
-    final locationResult = await ref.read(locationServiceProvider).getCurrentLocation();
-    ref.read(helpRepositoryProvider).triggerSOS(
-      patientId, 
-      locationResult?.latitude, 
-      locationResult?.longitude
-    );
-
-    // Step 4: Start cascading calls
-    final currentState = state;
-    if (currentState is HelpStateLoaded) {
-      _startCascadingCalls(currentState.contacts);
-    }
+    // Step 3: GPS and Repository Call simultaneously (fire and forget, do not await)
+    ref.read(storageServiceProvider).getPatientId().then((patientId) async {
+       if (patientId == null) return;
+       final locationResult = await ref.read(locationServiceProvider).getCurrentLocation();
+       ref.read(helpRepositoryProvider).triggerSOS(
+         patientId, 
+         locationResult?.latitude, 
+         locationResult?.longitude
+       );
+    });
   }
 
   Future<void> _startCascadingCalls(List<ContactItem> contacts) async {
